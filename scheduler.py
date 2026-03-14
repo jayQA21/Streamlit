@@ -5,6 +5,9 @@ Fires at 9:00 AM London time every weekday via background thread
 
 import os, re, requests, threading
 from datetime import date, datetime
+from zoneinfo import ZoneInfo
+
+IST = ZoneInfo("Asia/Kolkata")
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -88,7 +91,7 @@ def build_metrics(tickets):
     blocked   = [t for t in tickets if t["status"] in BLOCKED_STATUSES]
     total_sp  = sum(t["sp"] or 0 for t in tickets)
     done_sp   = sum(t["sp"] or 0 for t in done)
-    today     = date.today()
+    today     = datetime.now(ZoneInfo("Asia/Kolkata")).date()
     cur_day   = max(1, min((today - SPRINT_START).days + 1, SPRINT_DAYS))
     days_left = SPRINT_DAYS - cur_day
     pct_done  = round(len(done) / total * 100) if total else 0
@@ -124,7 +127,7 @@ def get_motivation():
 
 
 def build_slack_message(m, tickets):
-    today    = date.today()
+    today    = datetime.now(IST).date()
     weekday  = today.strftime("%A")
     date_str = today.strftime("%d %b %Y")
 

@@ -28,7 +28,7 @@ SPRINT_NAME   = "Release Sprint 3"
 SPRINT_START  = date(2026, 2, 24)
 SPRINT_DAYS   = 48
 
-DONE_STATUSES    = {"Done", "PO/QA VALID", "Demo", "In Production", "CS Reviewed"}
+DONE_STATUSES    = {"Done", "PO/QA VALID", "In demo", "In production", "CS reviewed", "Demo", "In Production", "CS Reviewed"}
 BLOCKED_STATUSES = {"Blocked"}
 ACTIVE_STATUSES  = {"In Progress", "AIM OF THE DAY", "Tech review", "PO review",
                      "PO/QA Test run", "Aim Of The week", "PO not valid"}

@@ -249,11 +249,7 @@ def render_overview(m):
             ("📋 To Do", m["sc"].get("To Do",0), "#64748b"),
             ("⚠️ PO Not Valid", m["sc"].get("PO not valid",0), "#f97316"),
             ("🔬 Tech Strategy", m["sc"].get("Tech strategy",0), "#a78bfa"),
-            ("⚠️ PO Not Valid", m["sc"].get("PO not valid",0), "#f97316"),
-        ("🔬 Tech Strategy", m["sc"].get("Tech strategy",0), "#a78bfa"),
-        ("⚠️ PO Not Valid", m["sc"].get("PO not valid",0), "#f97316"),
-        ("🔬 Tech Strategy", m["sc"].get("Tech strategy",0), "#a78bfa"),
-        ("🚫 Blocked", blocked_ct, "#f87171"),
+            ("🚫 Blocked", blocked_ct, "#f87171"),
         ]
         for label, val, color in groups:
             pct_bar = (val/total*100) if total else 0

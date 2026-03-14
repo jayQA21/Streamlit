@@ -102,22 +102,22 @@ def check_pin():
 
     .login-bg {
         position:fixed;top:0;left:0;width:100%;height:100%;
-        background: radial-gradient(ellipse at 30% 20%, #1a0533 0%, #0a0118 40%, #000510 100%);
+        background: radial-gradient(ellipse at 30% 20%, #0a2a4a 0%, #051525 50%, #020d18 100%);
         z-index:-1;
     }
     .orb1 {
         position:fixed;top:-100px;right:-100px;width:400px;height:400px;border-radius:50%;
-        background:radial-gradient(circle, rgba(167,139,250,0.15) 0%, transparent 70%);
+        background:radial-gradient(circle, rgba(0,212,255,0.15) 0%, transparent 70%);
         animation:pulse2 4s ease-in-out infinite;
     }
     .orb2 {
         position:fixed;bottom:-150px;left:-100px;width:500px;height:500px;border-radius:50%;
-        background:radial-gradient(circle, rgba(244,114,182,0.1) 0%, transparent 70%);
+        background:radial-gradient(circle, rgba(16,185,129,0.1) 0%, transparent 70%);
         animation:pulse2 6s ease-in-out infinite reverse;
     }
     .orb3 {
         position:fixed;top:40%;left:10%;width:200px;height:200px;border-radius:50%;
-        background:radial-gradient(circle, rgba(99,102,241,0.08) 0%, transparent 70%);
+        background:radial-gradient(circle, rgba(56,189,248,0.08) 0%, transparent 70%);
         animation:pulse2 8s ease-in-out infinite;
     }
     .login-card {
@@ -127,12 +127,12 @@ def check_pin():
         font-size:72px;
         animation:float 3s ease-in-out infinite;
         display:block;
-        filter:drop-shadow(0 0 20px rgba(167,139,250,0.8));
+        filter:drop-shadow(0 0 24px rgba(0,212,255,0.9)) drop-shadow(0 0 48px rgba(16,185,129,0.4));
     }
     .login-title {
         font-size:42px !important;
         font-weight:900 !important;
-        background:linear-gradient(135deg, #a78bfa, #f472b6, #60a5fa, #a78bfa) !important;
+        background:linear-gradient(135deg, #00d4ff, #10b981, #38bdf8, #00d4ff) !important;
         background-size:300% auto !important;
         -webkit-background-clip:text !important;
         -webkit-text-fill-color:transparent !important;
@@ -142,7 +142,7 @@ def check_pin():
     .login-sub { color:#6b7280;font-size:14px;letter-spacing:2px;text-transform:uppercase; }
     .pin-line {
         width:60px;height:3px;margin:20px auto;
-        background:linear-gradient(90deg,#a78bfa,#f472b6);
+        background:linear-gradient(90deg,#00d4ff,#10b981);
         border-radius:99px;
     }
     </style>
@@ -157,7 +157,7 @@ def check_pin():
             <div class="pin-line"></div>
             <div class="login-sub">MineHub · Sprint Intelligence</div>
         </div>
-        <div style="margin-top:32px;background:rgba(255,255,255,0.03);border:1px solid rgba(167,139,250,0.2);border-radius:20px;padding:32px 28px;backdrop-filter:blur(20px);">
+        <div style="margin-top:32px;background:rgba(255,255,255,0.03);border:1px solid rgba(0,212,255,0.2);border-radius:20px;padding:32px 28px;backdrop-filter:blur(20px);">
             <p style="color:#9ca3af;font-size:13px;margin-bottom:20px;letter-spacing:1px;">🔐 ENTER ACCESS PIN</p>
         </div>
     </div>
@@ -169,7 +169,7 @@ def check_pin():
         <style>
         div[data-testid="stTextInput"] input {
             background: rgba(255,255,255,0.04) !important;
-            border: 1px solid rgba(167,139,250,0.3) !important;
+            border: 1px solid rgba(0,212,255,0.3) !important;
             border-radius: 12px !important;
             color: #e2e8f0 !important;
             font-size: 20px !important;
@@ -178,8 +178,8 @@ def check_pin():
             padding: 14px !important;
         }
         div[data-testid="stTextInput"] input:focus {
-            border-color: rgba(244,114,182,0.6) !important;
-            box-shadow: 0 0 20px rgba(167,139,250,0.2) !important;
+            border-color: rgba(0,212,255,0.7) !important;
+            box-shadow: 0 0 20px rgba(0,212,255,0.25) !important;
         }
         </style>
         """, unsafe_allow_html=True)
@@ -189,6 +189,7 @@ def check_pin():
             if pin == DASHBOARD_PIN:
                 st.session_state.authenticated = True
                 st.balloons()
+                time.sleep(2)
                 st.rerun()
             else:
                 st.error("⚠️ Incorrect PIN — try again")

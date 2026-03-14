@@ -62,28 +62,180 @@ st.set_page_config(page_title="Jules Sprint Dashboard", page_icon="🚀", layout
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700;900&family=Space+Mono:wght@400;700&display=swap');
+
+/* ── BASE ── */
 html, body, [class*="css"] { font-family: 'DM Sans', sans-serif !important; background-color: #080c1a !important; color: #e2e8f0 !important; }
 .stApp { background: radial-gradient(ellipse at 20% 10%, #0d1b3e 0%, #080c1a 55%, #050710 100%) !important; }
 #MainMenu, footer, header { visibility: hidden; }
 .block-container { padding-top: 1.5rem !important; max-width: 1400px !important; }
+
+/* ── TABS ── */
 [data-baseweb="tab-list"] { background: rgba(15,22,41,0.8) !important; border-radius: 12px !important; padding: 4px !important; }
-[data-baseweb="tab"] { background: transparent !important; color: #475569 !important; border-radius: 8px !important; font-weight: 600 !important; font-size: 0.75rem !important; }
+[data-baseweb="tab"] { background: transparent !important; color: #475569 !important; border-radius: 8px !important; font-weight: 600 !important; font-size: 0.75rem !important; transition: all 0.2s !important; }
 [aria-selected="true"] { background: rgba(0,212,255,0.1) !important; color: #00d4ff !important; border-bottom: 2px solid #00d4ff !important; }
-.stButton > button { background: linear-gradient(135deg, rgba(0,212,255,0.1), rgba(129,140,248,0.1)) !important; border: 1px solid rgba(0,212,255,0.3) !important; color: #00d4ff !important; border-radius: 10px !important; font-weight: 700 !important; }
-.stProgress > div > div { background: linear-gradient(90deg, #00d4ff, #818cf8) !important; border-radius: 99px !important; }
-div[data-testid="stMetric"] { background: linear-gradient(135deg, rgba(15,22,41,0.95), rgba(20,30,55,0.9)); border: 1px solid rgba(0,212,255,0.2); border-radius: 14px; padding: 12px 14px; }
+
+/* ── BUTTONS ── */
+.stButton > button {
+    background: linear-gradient(135deg, rgba(0,212,255,0.08), rgba(129,140,248,0.08)) !important;
+    border: 1px solid rgba(0,212,255,0.3) !important;
+    color: #00d4ff !important; border-radius: 10px !important;
+    font-weight: 700 !important; transition: all 0.25s ease !important;
+    position: relative; overflow: hidden !important;
+}
+.stButton > button::before {
+    content: ''; position: absolute; top: 0; left: -100%;
+    width: 100%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(0,212,255,0.1), transparent);
+    transition: left 0.5s ease;
+}
+.stButton > button:hover::before { left: 100% !important; }
+.stButton > button:hover {
+    border-color: #00d4ff !important;
+    background: rgba(0,212,255,0.15) !important;
+    box-shadow: 0 0 20px rgba(0,212,255,0.25) !important;
+    transform: translateY(-1px) !important;
+}
+.stButton > button:active { transform: translateY(0px) !important; }
+
+/* ── PROGRESS BAR ── */
+.stProgress > div > div { background: linear-gradient(90deg, #00d4ff, #818cf8) !important; border-radius: 99px !important; transition: width 1s ease !important; }
+
+/* ── METRICS ── */
+div[data-testid="stMetric"] {
+    background: linear-gradient(135deg, rgba(15,22,41,0.95), rgba(20,30,55,0.9)) !important;
+    border: 1px solid rgba(0,212,255,0.15) !important; border-radius: 14px !important; padding: 14px 16px !important;
+    transition: all 0.3s ease !important; cursor: default !important;
+}
+div[data-testid="stMetric"]:hover {
+    border-color: rgba(0,212,255,0.45) !important;
+    box-shadow: 0 0 24px rgba(0,212,255,0.15), 0 4px 24px rgba(0,0,0,0.3) !important;
+    transform: translateY(-2px) !important;
+}
 div[data-testid="stMetricValue"] { color: #00d4ff !important; font-family: 'Space Mono', monospace !important; }
 div[data-testid="stMetricLabel"] { color: #64748b !important; font-size: 0.7rem !important; text-transform: uppercase !important; letter-spacing: 0.1em !important; }
-@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
-.live-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #10b981; box-shadow: 0 0 8px #10b981; animation: pulse 2s infinite; margin-right: 6px; }
-.ticket-key a { color: #00d4ff !important; font-family: 'Space Mono', monospace !important; font-size: 11px !important; text-decoration: none !important; border-bottom: 1px dotted rgba(0,212,255,0.4); }
-.ticket-summary a { color: #94a3b8 !important; text-decoration: none !important; }
+
+/* ── TICKET LINKS ── */
+.ticket-key a {
+    color: #00d4ff !important; font-family: 'Space Mono', monospace !important;
+    font-size: 11px !important; text-decoration: none !important;
+    border-bottom: 1px dotted rgba(0,212,255,0.4);
+    transition: all 0.2s !important;
+}
+.ticket-key a:hover { color: #fff !important; border-bottom-color: #fff !important; }
+.ticket-summary a { color: #94a3b8 !important; text-decoration: none !important; transition: color 0.2s !important; }
 .ticket-summary a:hover { color: #c4b5fd !important; }
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: #080c1a; }
+::-webkit-scrollbar-thumb { background: linear-gradient(180deg,#00d4ff,#818cf8); border-radius: 99px; }
+
+/* ── SIDEBAR ── */
+[data-testid="stSidebar"] { background: rgba(8,12,26,0.95) !important; border-right: 1px solid rgba(0,212,255,0.08) !important; }
+
+/* ── ANIMATIONS ── */
+@keyframes pulse       { 0%,100%{opacity:1} 50%{opacity:0.3} }
+@keyframes pulse-ring  { 0%{transform:scale(0.9);opacity:1} 100%{transform:scale(1.8);opacity:0} }
+@keyframes fadeInUp    { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+@keyframes fadeInLeft  { from{opacity:0;transform:translateX(-20px)} to{opacity:1;transform:translateX(0)} }
+@keyframes slideIn     { from{opacity:0;transform:translateY(-10px)} to{opacity:1;transform:translateY(0)} }
+@keyframes countUp     { from{opacity:0;transform:scale(0.8)} to{opacity:1;transform:scale(1)} }
+@keyframes shimmerBar  { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
+@keyframes borderGlow  { 0%,100%{border-color:rgba(0,212,255,0.2)} 50%{border-color:rgba(0,212,255,0.6)} }
+@keyframes floatUp     { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+@keyframes spin-slow   { to{transform:rotate(360deg)} }
+@keyframes dash        { to{stroke-dashoffset:0} }
+@keyframes barFill     { from{width:0%} to{width:var(--target-width)} }
+
+/* ── ANIMATED CARDS ── */
+.anim-card {
+    animation: fadeInUp 0.5s cubic-bezier(0.16,1,0.3,1) both;
+    background: rgba(15,22,41,0.9);
+    border: 1px solid rgba(0,212,255,0.08);
+    border-radius: 16px; padding: 20px 22px; margin-bottom: 12px;
+    transition: border-color 0.3s, box-shadow 0.3s, transform 0.3s;
+}
+.anim-card:hover {
+    border-color: rgba(0,212,255,0.22) !important;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3), 0 0 0 1px rgba(0,212,255,0.1) !important;
+    transform: translateY(-2px) !important;
+}
+
+/* ── ANIMATED BARS ── */
+.bar-wrap { background:#1e2d47; border-radius:999px; height:6px; overflow:hidden; }
+.bar-fill {
+    height:100%; border-radius:999px;
+    background-size:200% auto;
+    animation: shimmerBar 3s linear infinite;
+}
+
+/* ── LIVE DOT ── */
+.live-dot-wrap { position:relative; display:inline-flex; align-items:center; }
+.live-dot { width:8px;height:8px;border-radius:50%;background:#10b981;box-shadow:0 0 8px #10b981;animation:pulse 2s infinite;display:inline-block;margin-right:6px; }
+.live-dot::after { content:'';position:absolute;top:-2px;left:-2px;width:12px;height:12px;border-radius:50%;background:rgba(16,185,129,0.3);animation:pulse-ring 2s infinite; }
+
+/* ── STATUS BADGE ── */
+.status-badge { display:inline-block;padding:2px 8px;border-radius:99px;font-size:9px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase; }
+
+/* ── TICKET ROW HOVER ── */
+.ticket-row-wrap {
+    display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;
+    margin-bottom:3px;background:rgba(255,255,255,0.015);
+    border:1px solid rgba(255,255,255,0.04);
+    transition: all 0.2s ease; cursor:default;
+}
+.ticket-row-wrap:hover {
+    background:rgba(0,212,255,0.04) !important;
+    border-color:rgba(0,212,255,0.12) !important;
+    transform:translateX(3px) !important;
+}
+.ticket-row-blocked {
+    background:rgba(248,113,113,0.04) !important;
+    border-color:rgba(248,113,113,0.15) !important;
+}
+.ticket-row-blocked:hover {
+    background:rgba(248,113,113,0.07) !important;
+    border-color:rgba(248,113,113,0.3) !important;
+}
+
+/* ── SKELETON LOADING ── */
+.skeleton { background:linear-gradient(90deg,#1e2d47 25%,rgba(0,212,255,0.06) 50%,#1e2d47 75%); background-size:400% 100%; animation:shimmerBar 1.5s infinite; border-radius:8px; }
+
+/* ── SECTION HEADERS ── */
+.section-header {
+    font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;
+    color:#475569;margin-bottom:14px;
+    display:flex;align-items:center;gap:8px;
+}
+.section-header::after { content:'';flex:1;height:1px;background:linear-gradient(90deg,rgba(0,212,255,0.2),transparent); }
+
+/* ── BLOCKED PULSE ── */
+.blocked-alert { animation: borderGlow 2s ease-in-out infinite; }
+
+/* ── DEV CARD HOVER ── */
+.dev-card { transition: all 0.25s ease !important; }
+.dev-card:hover { transform: translateY(-3px) !important; box-shadow: 0 12px 32px rgba(0,0,0,0.3) !important; }
+
+/* ── TYPEWRITER CURSOR ── */
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+.cursor { animation: blink 1s infinite; color:#00d4ff; }
+
+/* ── FLOATING PARTICLES ── */
+@keyframes float-particle {
+    0%   { transform: translateY(100vh) translateX(0)    rotate(0deg);   opacity: 0; }
+    10%  { opacity: 0.4; }
+    90%  { opacity: 0.2; }
+    100% { transform: translateY(-10vh) translateX(50px) rotate(360deg); opacity: 0; }
+}
+.particle {
+    position: fixed; border-radius: 50%; pointer-events: none;
+    animation: float-particle linear infinite;
+}
 </style>
 """, unsafe_allow_html=True)
 
 
-# ─── PIN PROTECTION ───────────────────────────────────────
+# ─── PIN PROTECTION# ─── PIN PROTECTION ───────────────────────────────────────
 def check_pin():
     if not DASHBOARD_PIN:
         return True
@@ -424,7 +576,7 @@ def render_overview(m):
         st.plotly_chart(fig, use_container_width=True)
 
     with col2:
-        st.markdown("**📋 Group Summary**")
+        st.markdown('<div class="section-header">📋 Group Summary</div>', unsafe_allow_html=True)
         groups = [
             ("✅ Done", done_ct, "#10b981"),
             ("👀 In Review", m["sc"].get("PO review",0)+m["sc"].get("Tech review",0), "#818cf8"),
@@ -440,17 +592,20 @@ def render_overview(m):
             pct_bar = (val/total*100) if total else 0
             st.markdown(f"""
 <div style="margin-bottom:10px;">
-<div style="display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;margin-bottom:3px;">
-<span>{label}</span><span style="color:{color};font-weight:700;">{val}/{total}</span>
+<div style="display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;margin-bottom:4px;">
+<span>{label}</span>
+<span style="color:{color};font-weight:700;font-family:'Space Mono',monospace;">{val}<span style="color:#1e3a5f">/{total}</span></span>
 </div>
-<div style="background:#1e2d47;border-radius:999px;height:5px;">
-<div style="width:{pct_bar:.1f}%;height:100%;border-radius:999px;background:{color};"></div>
-</div></div>""", unsafe_allow_html=True)
+<div style="background:#1e2d47;border-radius:999px;height:6px;overflow:hidden;">
+<div style="width:{pct_bar:.1f}%;height:100%;border-radius:999px;
+  background:linear-gradient(90deg,{color},{color}88,{color});background-size:200% auto;
+  animation:shimmerBar 2.5s linear infinite;box-shadow:0 0 6px {color}40;">
+</div></div></div>""", unsafe_allow_html=True)
 
     st.markdown("---")
 
     # ── Team Workload — using native st.columns + st.markdown per card ──
-    st.markdown("**👥 Team Workload**")
+    st.markdown('<div class="section-header">👥 Team Workload</div>', unsafe_allow_html=True)
     devs = [(n,d) for n,d in m["dev_map"].items() if n!="Unassigned"]
     devs.sort(key=lambda x: x[1]["total"], reverse=True)
     cols = st.columns(len(devs))
@@ -530,7 +685,7 @@ def render_burndown(m):
 def render_velocity(m):
     devs = [(n,d) for n,d in m["dev_map"].items() if n!="Unassigned"]
     devs.sort(key=lambda x: x[1]["total"], reverse=True)
-    st.markdown("**⚡ Developer Velocity**")
+    st.markdown('<div class="section-header">⚡ Developer Velocity</div>', unsafe_allow_html=True)
     names = [n.split()[0] for n,_ in devs]
     fig = go.Figure()
     for lbl, key, clr in [("Done","done","#10b981"),("Active","active","#38bdf8"),("Blocked","blocked","#f87171"),("Todo","todo","#334155")]:
@@ -580,7 +735,7 @@ def render_points(m):
     st.markdown("<br>", unsafe_allow_html=True)
     devs = [(n,d) for n,d in m["dev_map"].items() if n!="Unassigned"]
     devs.sort(key=lambda x: x[1]["total"], reverse=True)
-    st.markdown("**📊 Story Points per Developer**")
+    st.markdown('<div class="section-header">📊 Story Points per Developer</div>', unsafe_allow_html=True)
     names = [n.split()[0] for n,_ in devs]
     fig = go.Figure()
     for lbl, key, clr in [("Done SP","doneSP","#10b981"),("Blocked SP","blockedSP","#f87171"),("Rest SP",None,"#334155")]:
@@ -598,7 +753,14 @@ def render_points(m):
 # ─── ALL TICKETS TAB ──────────────────────────────────────
 def render_tickets(m):
     tickets = m["tickets"]
-    st.markdown(f"**🎫 All Sprint Tickets ({len(tickets)})** · Full titles · AAWU/AAD stripped · Click to open in Jira")
+    st.markdown(f"""
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;animation:fadeInUp 0.4s ease both;">
+  <div>
+    <span style="font-size:16px;font-weight:700;">🎫 All Sprint Tickets ({len(tickets)})</span>
+    <span style="font-size:11px;color:#475569;margin-left:10px;">Full titles · AAWU/AAD stripped · Click to open in Jira</span>
+  </div>
+  <span style="font-size:9px;color:#34d399;background:rgba(52,211,153,0.08);border:1px solid rgba(52,211,153,0.2);padding:4px 10px;border-radius:6px;">🔗 Clickable tickets</span>
+</div>""", unsafe_allow_html=True)
     for status in STATUS_ORDER:
         group = [t for t in tickets if t["status"]==status]
         if not group:
@@ -611,8 +773,8 @@ def render_tickets(m):
             fname = t["assignee"].split()[0]
             sp_badge = f'<span style="font-size:9px;color:#fb923c;font-weight:800;background:rgba(251,146,60,0.1);padding:2px 5px;border-radius:3px;">{t["sp"]}sp</span>' if t["sp"] else ""
             bg = "rgba(248,113,113,0.04)" if status=="Blocked" else "rgba(255,255,255,0.015)"
-            border = "rgba(248,113,113,0.15)" if status=="Blocked" else "rgba(255,255,255,0.05)"
-            rows += f'<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;margin-bottom:3px;background:{bg};border:1px solid {border};">'
+            row_cls = "ticket-row-wrap ticket-row-blocked" if status=="Blocked" else "ticket-row-wrap"
+            rows += f'<div class="{row_cls}">'
             rows += f'<span class="ticket-key" style="min-width:70px;flex-shrink:0;"><a href="{JIRA_BASE}/browse/{t["key"]}" target="_blank">{t["key"]}</a></span>'
             rows += f'<span style="font-size:9px;color:#7dd3fc;background:rgba(129,140,248,0.1);border-radius:3px;padding:2px 5px;min-width:44px;text-align:center;flex-shrink:0;">{t["type"][:7]}</span>'
             rows += f'<span class="ticket-summary" style="flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;"><a href="{JIRA_BASE}/browse/{t["key"]}" target="_blank">{t["summary"]}</a></span>'
@@ -639,16 +801,29 @@ def main():
 
     # Loading screen
     placeholder = st.empty()
-    placeholder.markdown("""<div style="text-align:center;padding:60px 20px;">
-<div style="font-size:52px;margin-bottom:16px;">🚀</div>
-<h2 style="background:linear-gradient(90deg,#00d4ff,#818cf8,#f472b6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-size:24px;font-weight:900;">Fetching Sprint Data</h2>
-<p style="color:#475569;font-size:13px;margin-top:8px;">Connecting to Jira...</p>
-<style>@keyframes pulse{0%,100%{opacity:.3;transform:scale(.8)}50%{opacity:1;transform:scale(1.2)}}</style>
-<div style="display:flex;gap:10px;justify-content:center;margin-top:24px;">
-<div style="width:10px;height:10px;border-radius:50%;background:#00d4ff;animation:pulse 0.8s ease-in-out infinite;"></div>
-<div style="width:10px;height:10px;border-radius:50%;background:#818cf8;animation:pulse 0.8s ease-in-out 0.2s infinite;"></div>
-<div style="width:10px;height:10px;border-radius:50%;background:#f472b6;animation:pulse 0.8s ease-in-out 0.4s infinite;"></div>
-</div></div>""", unsafe_allow_html=True)
+    placeholder.markdown("""
+    <style>
+    @keyframes rocket-launch{0%,100%{transform:translateY(0) rotate(-5deg)}50%{transform:translateY(-20px) rotate(5deg)}}
+    @keyframes prog-bar{0%{width:0%}100%{width:95%}}
+    @keyframes glow-p{0%,100%{box-shadow:0 0 20px rgba(0,212,255,0.3)}50%{box-shadow:0 0 40px rgba(0,212,255,0.7)}}
+    @keyframes shimBar{0%{background-position:-300% center}100%{background-position:300% center}}
+    </style>
+    <div style="text-align:center;padding:80px 20px;min-height:55vh;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+        <div style="font-size:72px;animation:rocket-launch 1.5s ease-in-out infinite;margin-bottom:28px;
+            filter:drop-shadow(0 0 20px rgba(0,212,255,0.8)) drop-shadow(0 0 40px rgba(129,140,248,0.4));">🚀</div>
+        <h2 style="background:linear-gradient(90deg,#00d4ff,#818cf8,#f472b6,#00d4ff);background-size:300% auto;
+            -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+            font-size:28px;font-weight:900;margin-bottom:8px;animation:shimBar 2s linear infinite;">
+            Fetching Sprint Data
+        </h2>
+        <p style="color:#475569;font-size:13px;margin-bottom:32px;letter-spacing:1px;">Connecting to Jira · JENG Project</p>
+        <div style="width:300px;height:4px;background:rgba(255,255,255,0.05);border-radius:99px;overflow:hidden;margin-bottom:24px;animation:glow-p 2s infinite;">
+            <div style="height:100%;background:linear-gradient(90deg,#00d4ff,#818cf8,#f472b6);border-radius:99px;animation:prog-bar 2.5s ease-out forwards;"></div>
+        </div>
+        <div style="display:flex;gap:24px;font-size:10px;color:#334155;letter-spacing:1px;">
+            <span>🔐 Authenticating</span><span>📡 Fetching tickets</span><span>📊 Building metrics</span>
+        </div>
+    </div>""", unsafe_allow_html=True)
 
     try:
         tickets = fetch_jira_tickets()
@@ -666,6 +841,18 @@ def main():
         ok, _ = post_to_slack(m["blocked"], m)
         if ok: st.toast("✅ Posted to Slack!", icon="📣")
 
+    # Animated floating particles background
+    st.markdown("""
+    <div id="particles">
+    """ + "".join([
+        f'<div class="particle" style="left:{(i*37)%100}%;width:{3+i%4}px;height:{3+i%4}px;'
+        f'background:{"#00d4ff" if i%3==0 else "#818cf8" if i%3==1 else "#10b981"};'
+        f'opacity:0.15;animation-duration:{8+i*1.3:.1f}s;animation-delay:{i*0.7:.1f}s;"></div>'
+        for i in range(12)
+    ]) + """
+    </div>
+    """, unsafe_allow_html=True)
+
     # Header
     days_left = SPRINT_DAYS - m["current_day"]
     pct = round(len(m["done"])/m["total"]*100) if m["total"] else 0
@@ -673,7 +860,7 @@ def main():
     sl = "On Track 🎯" if m["status"]=="on-track" else "Slight Risk ⚠️" if m["status"]=="slight-risk" else "Behind 🚨"
     st.markdown(f"""<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
 <div><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;"><span class="live-dot"></span><span style="font-size:10px;color:#10b981;text-transform:uppercase;letter-spacing:2px;font-weight:600;">Live · Jira · 5 min cache</span></div>
-<h1 style="font-size:26px;font-weight:900;margin:0;background:linear-gradient(90deg,#00d4ff,#818cf8,#f472b6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">Jules Sprint Dashboard</h1>
+<h1 style="font-size:26px;font-weight:900;margin:0;background:linear-gradient(90deg,#00d4ff,#818cf8,#f472b6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:fadeInLeft 0.6s ease both;">Jules Sprint Dashboard<span class="cursor">|</span></h1>
 <div style="font-size:12px;color:#475569;margin-top:4px;">{SPRINT_NAME} · Feb 24 – Apr 12, 2026 · {fetched_at}</div></div>
 <div style="display:flex;gap:10px;flex-wrap:wrap;">
 <div style="background:rgba(0,212,255,0.07);border:1px solid rgba(0,212,255,0.18);border-radius:10px;padding:10px 16px;font-size:12px;color:#7dd3fc;text-align:center;">📅 Day <strong>{m["current_day"]}</strong> / {SPRINT_DAYS}<br><span style="color:#475569;font-size:10px;">{days_left} days left</span></div>
@@ -696,14 +883,25 @@ def main():
             if st.button("🔄 Refresh"):
                 st.cache_data.clear(); st.rerun()
 
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Overview","🔥 Burndown","⚡ Velocity","💎 Story Points","🎫 All Tickets"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        f"📊 Overview",
+        f"🔥 Burndown",
+        f"⚡ Velocity",
+        f"💎 Story Points",
+        f"🎫 All Tickets ({len(tickets)})",
+    ])
     with tab1: render_overview(m)
     with tab2: render_burndown(m)
     with tab3: render_velocity(m)
     with tab4: render_points(m)
     with tab5: render_tickets(m)
 
-    st.markdown(f"<div style='text-align:center;font-size:9px;color:#1e2d47;border-top:1px solid #0d1528;padding-top:12px;margin-top:20px;'>Jules Product · MineHub · {SPRINT_NAME} · {m['total']} tickets · {m['total_sp']} SP · {fetched_at}</div>", unsafe_allow_html=True)
+    st.markdown(
+        f"<div style='text-align:center;font-size:9px;color:#334155;border-top:1px solid rgba(0,212,255,0.06);padding-top:14px;margin-top:24px;letter-spacing:1px;'>"
+        f"Jules Product &nbsp;·&nbsp; MineHub &nbsp;·&nbsp; {SPRINT_NAME} &nbsp;·&nbsp; {m['total']} tickets &nbsp;·&nbsp; {m['total_sp']} SP &nbsp;·&nbsp; {fetched_at}"
+        f"</div>",
+        unsafe_allow_html=True
+    )
 
 if __name__ == "__main__":
     main()

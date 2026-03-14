@@ -234,7 +234,7 @@ def clean_title(summary: str) -> str:
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_jira_tickets():
     """Fetch live sprint tickets from Jira REST API. Cached for 5 minutes."""
-    url = f"{JIRA_BASE}/rest/api/3/search"
+    url = f"{JIRA_BASE}/rest/api/3/search/jql"
     headers = {"Accept": "application/json"}
     auth = (JIRA_EMAIL, JIRA_TOKEN)
     params = {

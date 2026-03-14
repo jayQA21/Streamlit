@@ -1,13 +1,11 @@
 """
 Jules Sprint Daily Notifier — scheduler.py
-Fires at 9:00 AM London time every weekday via background thread
+Fires at 9:00 AM IST every weekday via GitHub Actions
 """
 
 import os, re, requests, threading
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
-
-IST = ZoneInfo("Asia/Kolkata")
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -18,6 +16,7 @@ JIRA_BASE     = os.getenv("JIRA_BASE_URL", "https://minehub.atlassian.net")
 SLACK_WEBHOOK = os.getenv("SLACK_WEBHOOK_URL", "")
 DASHBOARD_URL = os.getenv("DASHBOARD_URL", "https://julesdashboard.streamlit.app")
 
+IST          = ZoneInfo("Asia/Kolkata")
 PROJECT      = "JENG"
 SPRINT_NAME  = "Release Sprint 3"
 SPRINT_START = date(2026, 2, 24)
@@ -28,11 +27,12 @@ DONE_STATUSES    = {"Done","PO/QA VALID","In demo","In production","CS reviewed"
 BLOCKED_STATUSES = {"Blocked"}
 ACTIVE_STATUSES  = {"In Progress","AIM OF THE DAY","Tech review","PO review","PO/QA Test run","Aim Of The week","PO not valid","Tech strategy"}
 
-DEV_EMOJIS = {
-    "Nikita Vaidya": "🟣",
-    "Satadru Roy":   "🩷",
-    "Rizky Ario":    "🟠",
-    "Jay Pitroda":   "🟢",
+# Consistent color theme per developer
+DEV_CONFIG = {
+    "Nikita Vaidya": {"dot": "🟪", "bar": "🟪", "initial": "NV"},  # purple
+    "Satadru Roy":   {"dot": "🟥", "bar": "🟥", "initial": "SR"},  # red
+    "Rizky Ario":    {"dot": "🟨", "bar": "🟨", "initial": "RA"},  # yellow
+    "Jay Pitroda":   {"dot": "🟦", "bar": "🟦", "initial": "JP"},  # blue
 }
 
 DAILY_TIPS = [
@@ -43,23 +43,23 @@ DAILY_TIPS = [
     "Done = merged + deployed + verified. All three. 🚀",
     "The best code is the code you don't write. ✂️",
     "Sprint health = team health. Look out for each other. 🤝",
-    "Every blocker resolved today = smoother sprint review. 📊",
+    "Every blocker resolved = smoother sprint review. 📊",
     "Write the test first, thank yourself later. 🧪",
     "If it's unclear, clarify it now — not on the last day. 💬",
 ]
 
-MOTIVATIONAL = [
-    "Let's crush it today! 💪",
+GREETINGS = [
+    "Let's make today count! 💪",
     "Another day, another ticket shipped! 🚀",
     "Stay focused, stay unblocked! 🎯",
-    "Great work so far — keep pushing! ⚡",
-    "Sprint strong, team! 🏃",
+    "Great work so far — keep the momentum! ⚡",
+    "Sprint strong, team Jules! 🏃",
 ]
 
 
 def clean_title(s):
     s = re.sub(r'^(AAWU,?\s*|AAD,?\s*)', '', s, flags=re.IGNORECASE)
-    return s.lstrip(',').strip()[:60]
+    return s.lstrip(',').strip()[:58]
 
 
 def fetch_sprint_data():
@@ -86,44 +86,40 @@ def fetch_sprint_data():
 
 
 def build_metrics(tickets):
+    today     = datetime.now(IST).date()
     total     = len(tickets)
     done      = [t for t in tickets if t["status"] in DONE_STATUSES]
     blocked   = [t for t in tickets if t["status"] in BLOCKED_STATUSES]
     total_sp  = sum(t["sp"] or 0 for t in tickets)
     done_sp   = sum(t["sp"] or 0 for t in done)
-    today     = datetime.now(ZoneInfo("Asia/Kolkata")).date()
     cur_day   = max(1, min((today - SPRINT_START).days + 1, SPRINT_DAYS))
     days_left = SPRINT_DAYS - cur_day
     pct_done  = round(len(done) / total * 100) if total else 0
     pct_time  = round((cur_day - 1) / (SPRINT_DAYS - 1) * 100)
-    gap_pct   = pct_done - pct_time
-    health    = "on-track" if gap_pct >= -5 else "at-risk" if gap_pct >= -15 else "behind"
+    gap       = pct_done - pct_time
+    health    = "on-track" if gap >= -5 else "at-risk" if gap >= -15 else "behind"
+    velocity  = round((total - len(done)) / days_left) if days_left > 0 else 0
     return dict(
-        total=total, done=done, blocked=blocked, total_sp=total_sp, done_sp=done_sp,
-        cur_day=cur_day, days_left=days_left, pct_done=pct_done, pct_time=pct_time,
-        gap_pct=gap_pct, health=health,
+        total=total, done=done, blocked=blocked,
+        total_sp=total_sp, done_sp=done_sp,
+        cur_day=cur_day, days_left=days_left,
+        pct_done=pct_done, pct_time=pct_time,
+        gap=gap, health=health, velocity=velocity,
     )
 
 
-def progress_bar(pct, width=20):
-    """Emoji-based progress bar"""
+def make_bar(pct, width=12, color="🟩"):  # default green
+    """Colored emoji progress bar"""
     filled = round(pct / 100 * width)
-    return "█" * filled + "░" * (width - filled)
+    return color * filled + "⬜" * (width - filled)
 
 
-def sprint_countdown(cur_day, total=48, width=24):
-    """Mini sprint timeline bar"""
-    done_blocks  = round(cur_day / total * width)
-    left_blocks  = width - done_blocks
-    return "▓" * done_blocks + "░" * left_blocks
-
-
-def get_daily_tip():
+def get_tip():
     return DAILY_TIPS[date.today().timetuple().tm_yday % len(DAILY_TIPS)]
 
 
-def get_motivation():
-    return MOTIVATIONAL[date.today().timetuple().tm_yday % len(MOTIVATIONAL)]
+def get_greeting():
+    return GREETINGS[date.today().timetuple().tm_yday % len(GREETINGS)]
 
 
 def build_slack_message(m, tickets):
@@ -131,155 +127,188 @@ def build_slack_message(m, tickets):
     weekday  = today.strftime("%A")
     date_str = today.strftime("%d %b %Y")
 
-    # ── Health config ──
-    hcfg = {
-        "on-track": {"icon": "🟢", "label": "ON  TRACK ✅",  "bar_char": "🟩"},
-        "at-risk":  {"icon": "🟡", "label": "AT  RISK  ⚠️", "bar_char": "🟨"},
-        "behind":   {"icon": "🔴", "label": "BEHIND   🚨",   "bar_char": "🟥"},
+    # ── Health config — clean and consistent ──
+    health_map = {
+        "on-track": {"icon": "🟢", "label": "On Track",        "note": "Sprint is progressing well"},
+        "at-risk":  {"icon": "🟠", "label": "Slightly At Risk", "note": "Pick up the pace"},
+        "behind":   {"icon": "🔴", "label": "Behind Schedule",  "note": "Needs immediate attention"},
     }
-    hc = hcfg[m["health"]]
+    hc = health_map[m["health"]]
 
-    # ── Visual bars ──
-    done_bar  = progress_bar(m["pct_done"])
-    time_bar  = progress_bar(m["pct_time"])
-    countdown = sprint_countdown(m["cur_day"])
+    # ── Progress bars ──
+    done_bar = make_bar(m["pct_done"], color="🟩")   # green  = work done
+    time_bar = make_bar(m["pct_time"], color="🟧")   # orange = time elapsed
 
-    # ── Sprint velocity ──
-    avg_daily_needed = round((m["total"] - len(m["done"])) / m["days_left"]) if m["days_left"] > 0 else 0
+    # ── Per-dev stats — clean format ──
+    dev_rows = []
+    for name, cfg in DEV_CONFIG.items():
+        dev_tix  = [t for t in tickets if t["assignee"] == name]
+        if not dev_tix:
+            continue
+        d_done    = sum(1 for t in dev_tix if t["status"] in DONE_STATUSES)
+        d_blocked = sum(1 for t in dev_tix if t["status"] in BLOCKED_STATUSES)
+        d_sp_done = sum(t["sp"] or 0 for t in dev_tix if t["status"] in DONE_STATUSES)
+        d_sp_tot  = sum(t["sp"] or 0 for t in dev_tix)
+        pct       = round(d_done / len(dev_tix) * 100) if dev_tix else 0
+        bar       = make_bar(pct, width=10, color=cfg["bar"])
+        fname     = name.split()[0]
 
-    # ── Per-dev summary ──
-    dev_lines = []
-    for name, emoji in DEV_EMOJIS.items():
-        dev_tix     = [t for t in tickets if t["assignee"] == name]
-        if not dev_tix: continue
-        dev_done    = sum(1 for t in dev_tix if t["status"] in DONE_STATUSES)
-        dev_blocked = sum(1 for t in dev_tix if t["status"] in BLOCKED_STATUSES)
-        dev_sp_done = sum(t["sp"] or 0 for t in dev_tix if t["status"] in DONE_STATUSES)
-        dev_sp_tot  = sum(t["sp"] or 0 for t in dev_tix)
-        pct         = round(dev_done / len(dev_tix) * 100) if dev_tix else 0
-        mini_bar    = progress_bar(pct, width=8)
-        flag        = "  🚨 BLOCKED" if dev_blocked >= 2 else "  ⚠️" if dev_blocked == 1 else ""
-        sp_txt      = f"  `{dev_sp_done}/{dev_sp_tot} SP`" if dev_sp_tot else ""
-        dev_lines.append(
-            f"{emoji} *{name.split()[0]}*  `{mini_bar}`  {pct}%  `{dev_done}/{len(dev_tix)}`{sp_txt}{flag}"
+        # Consistent status indicator — always show exact count
+        if d_blocked >= 2:
+            status_tag = f"  ⛔ {d_blocked} Blocked"
+        elif d_blocked == 1:
+            status_tag = "  ⚠️ 1 Blocked"
+        else:
+            status_tag = "  ✅ Clear"
+
+        sp_info = f"  ·  {d_sp_done}/{d_sp_tot} SP" if d_sp_tot else ""
+        dev_rows.append(
+            f"{cfg['dot']}  *{fname}*   `{bar}`   *{pct}%*   {d_done}/{len(dev_tix)} tickets{sp_info}{status_tag}"
         )
 
-    # ── Blockers ──
-    blocked_lines = []
-    for t in m["blocked"][:6]:
-        emoji = DEV_EMOJIS.get(t["assignee"], "⚪")
-        name  = t["assignee"].split()[0] if t["assignee"] != "Unassigned" else "—"
-        blocked_lines.append(
-            f"{emoji}  *<{JIRA_BASE}/browse/{t['key']}|{t['key']}>*  ›  _{t['summary']}_  `{name}`"
+    # ── Blocked tickets — clean consistent format ──
+    blocker_rows = []
+    for t in m["blocked"][:5]:
+        cfg   = DEV_CONFIG.get(t["assignee"], {"dot": "⚪", "initial": "?"})
+        fname = t["assignee"].split()[0] if t["assignee"] != "Unassigned" else "Unassigned"
+        blocker_rows.append(
+            f"{cfg['dot']}  `{t['key']}`  →  {t['summary']}  —  *{fname}*"
         )
-    if len(m["blocked"]) > 6:
-        blocked_lines.append(f"_+ {len(m['blocked'])-6} more blocked tickets_")
+    if len(m["blocked"]) > 5:
+        blocker_rows.append(f"_...and {len(m['blocked']) - 5} more blocked tickets_")
 
-    blocked_section = "\n".join(blocked_lines) if blocked_lines else "✨  *No blockers today — keep it up!*"
+    no_blockers = not blocker_rows
 
-    tip        = get_daily_tip()
-    motivation = get_motivation()
+    tip      = get_tip()
+    greeting = get_greeting()
 
+    # ════════════════════════════════════════════
+    # SLACK BLOCK KIT MESSAGE
+    # ════════════════════════════════════════════
     blocks = [
 
-        # ══════════════════════════════════════════
-        # BLOCK 1 — HERO HEADER
-        # ══════════════════════════════════════════
+        # ── 1. HERO HEADER ──────────────────────
         {
             "type": "header",
             "text": {
                 "type": "plain_text",
-                "text": f"🚀  Good Morning, Jules Team!  ·  {weekday}",
+                "text": f"🚀  Jules Daily Standup  —  {weekday}, {date_str}",
                 "emoji": True
             }
         },
         {
             "type": "context",
-            "elements": [{"type": "mrkdwn", "text": f"📅  *{date_str}*  ·  {SPRINT_NAME}  ·  {motivation}"}]
+            "elements": [{
+                "type": "mrkdwn",
+                "text": f"*{SPRINT_NAME}*   ·   Day *{m['cur_day']}* of *{SPRINT_DAYS}*   ·   {greeting}"
+            }]
         },
-
         {"type": "divider"},
 
-        # ══════════════════════════════════════════
-        # BLOCK 2 — BURNDOWN VISUAL
-        # ══════════════════════════════════════════
+        # ── 2. BURNDOWN SECTION ─────────────────
+        {
+            "type": "rich_text",
+            "elements": [{
+                "type": "rich_text_section",
+                "elements": [{
+                    "type": "text",
+                    "text": "📉  Sprint Burndown",
+                    "style": {"bold": True}
+                }]
+            }]
+        },
         {
             "type": "section",
             "text": {
                 "type": "mrkdwn",
                 "text": (
-                    f"*📉  Sprint Burndown  ·  Day {m['cur_day']} of {SPRINT_DAYS}*\n\n"
                     f"```\n"
-                    f"  TIMELINE  ┣{time_bar}┫  {m['pct_time']}% elapsed\n"
-                    f"  DONE      ┣{done_bar}┫  {m['pct_done']}% complete\n"
-                    f"  SPRINT    ┣{countdown}┫\n"
+                    f" Time elapsed   {time_bar}  {m['pct_time']}%\n"
+                    f" Work done      {done_bar}  {m['pct_done']}%\n"
                     f"```\n"
-                    f"{hc['icon']}  *Status:* {hc['label']}   ·   "
-                    f"🎯  Need ~*{avg_daily_needed} tickets/day* to finish on time   ·   "
-                    f"📅  *{m['days_left']} days* remaining"
+                    f"{hc['icon']}  *{hc['label']}*  —  _{hc['note']}_\n"
+                    f"Need *~{m['velocity']} tickets/day* to finish   ·   *{m['days_left']} days* left"
                 )
             }
         },
-
         {"type": "divider"},
 
-        # ══════════════════════════════════════════
-        # BLOCK 3 — SPRINT STATS GRID
-        # ══════════════════════════════════════════
+        # ── 3. SPRINT STATS ─────────────────────
         {
-            "type": "section",
-            "text": {"type": "mrkdwn", "text": "*📊  Sprint Snapshot*"},
+            "type": "rich_text",
+            "elements": [{
+                "type": "rich_text_section",
+                "elements": [{
+                    "type": "text",
+                    "text": "📊  Sprint Snapshot",
+                    "style": {"bold": True}
+                }]
+            }]
         },
         {
             "type": "section",
             "fields": [
-                {"type": "mrkdwn", "text": f"✅  *Tickets Done*\n`{len(m['done'])} / {m['total']}`"},
-                {"type": "mrkdwn", "text": f"💎  *Story Points*\n`{m['done_sp']} / {m['total_sp']} SP`"},
-                {"type": "mrkdwn", "text": f"🚫  *Blocked*\n`{len(m['blocked'])} tickets`"},
-                {"type": "mrkdwn", "text": f"📅  *Days Left*\n`{m['days_left']} of {SPRINT_DAYS}`"},
+                {"type": "mrkdwn", "text": f"✅  *Done*\n*{len(m['done'])}* / {m['total']} tickets"},
+                {"type": "mrkdwn", "text": f"💎  *Story Points*\n*{m['done_sp']}* / {m['total_sp']} SP"},
+                {"type": "mrkdwn", "text": f"⛔  *Blocked*\n*{len(m['blocked'])}* tickets"},
+                {"type": "mrkdwn", "text": f"📅  *Days Left*\n*{m['days_left']}* of {SPRINT_DAYS} days"},
             ]
         },
-
         {"type": "divider"},
 
-        # ══════════════════════════════════════════
-        # BLOCK 4 — TEAM VELOCITY
-        # ══════════════════════════════════════════
+        # ── 4. TEAM VELOCITY ────────────────────
+        {
+            "type": "rich_text",
+            "elements": [{
+                "type": "rich_text_section",
+                "elements": [{
+                    "type": "text",
+                    "text": "👥  Team Velocity",
+                    "style": {"bold": True}
+                }]
+            }]
+        },
         {
             "type": "section",
             "text": {
                 "type": "mrkdwn",
-                "text": "*👥  Team Velocity*\n\n" + "\n".join(dev_lines)
+                "text": "\n".join(dev_rows)
             }
         },
-
         {"type": "divider"},
 
-        # ══════════════════════════════════════════
-        # BLOCK 5 — BLOCKERS ALERT
-        # ══════════════════════════════════════════
+        # ── 5. BLOCKERS ─────────────────────────
+        {
+            "type": "rich_text",
+            "elements": [{
+                "type": "rich_text_section",
+                "elements": [{
+                    "type": "text",
+                    "text": f"⛔  Active Blockers  ({len(m['blocked'])})",
+                    "style": {"bold": True}
+                }]
+            }]
+        },
         {
             "type": "section",
             "text": {
                 "type": "mrkdwn",
                 "text": (
-                    f"*🚨  Active Blockers  ({len(m['blocked'])})*\n"
-                    f"{'━' * 36}\n"
-                    f"{blocked_section}"
+                    "✨  *No blockers today — great work everyone!*"
+                    if no_blockers else
+                    "\n".join(blocker_rows)
                 )
             }
         },
-
         {"type": "divider"},
 
-        # ══════════════════════════════════════════
-        # BLOCK 6 — TIP + CTA
-        # ══════════════════════════════════════════
+        # ── 6. TIP + BUTTONS ────────────────────
         {
             "type": "context",
-            "elements": [
-                {"type": "mrkdwn", "text": f"💡  *Daily Tip:*  _{tip}_"}
-            ]
+            "elements": [{
+                "type": "mrkdwn",
+                "text": f"💡  *Tip of the Day*  —  {tip}"
+            }]
         },
         {
             "type": "actions",
@@ -287,27 +316,24 @@ def build_slack_message(m, tickets):
                 {
                     "type": "button",
                     "text": {"type": "plain_text", "text": "📊  Live Dashboard", "emoji": True},
-                    "url": DASHBOARD_URL,
+                    "url":   DASHBOARD_URL,
                     "style": "primary"
                 },
                 {
                     "type": "button",
-                    "text": {"type": "plain_text", "text": "🔗  Jira Board", "emoji": True},
-                    "url": f"{JIRA_BASE}/jira/software/c/projects/{PROJECT}/boards"
+                    "text": {"type": "plain_text", "text": "🗂  Jira Board", "emoji": True},
+                    "url":  f"{JIRA_BASE}/jira/software/c/projects/{PROJECT}/boards"
                 },
-                {
-                    "type": "button",
-                    "text": {"type": "plain_text", "text": "📋  All Blockers", "emoji": True},
-                    "url": f"{JIRA_BASE}/jira/software/c/projects/{PROJECT}/boards?assignee=unassigned&label=blocked"
-                }
             ]
         },
         {
             "type": "context",
-            "elements": [
-                {"type": "mrkdwn", "text": f"_Jules Sprint Bot  ·  Auto-sent at 9:00 AM  ·  {SPRINT_NAME}_"}
-            ]
-        }
+            "elements": [{
+                "type": "mrkdwn",
+                "text": f"_Jules Sprint Bot  ·  Auto-generated at 9:00 AM IST  ·  {SPRINT_NAME}_"
+            }]
+        },
+
     ]
 
     return {
@@ -322,25 +348,27 @@ def send_daily_notification():
         print("[Scheduler] No SLACK_WEBHOOK_URL — skipping")
         return
     try:
-        print(f"[Scheduler] Sending daily notification — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+        print(f"[Scheduler] Sending — {datetime.now(IST).strftime('%Y-%m-%d %H:%M IST')}")
         tickets = fetch_sprint_data()
         m       = build_metrics(tickets)
         payload = build_slack_message(m, tickets)
         resp    = requests.post(SLACK_WEBHOOK, json=payload, timeout=15)
         if resp.status_code == 200:
-            print("[Scheduler] ✅ Sent!")
+            print("[Scheduler] ✅ Sent successfully!")
         else:
-            print(f"[Scheduler] ❌ Slack error {resp.status_code}: {resp.text}")
+            print(f"[Scheduler] ❌ Error {resp.status_code}: {resp.text}")
     except Exception as e:
         print(f"[Scheduler] ❌ {e}")
 
 
 def start_scheduler():
     import schedule, time
-
-    schedule.every(1).minutes.do(send_daily_notification)
-
-    print("[Scheduler] 🕘 Scheduler started — fires Mon–Fri at 09:00")
+    schedule.every().monday.at("09:00").do(send_daily_notification)
+    schedule.every().tuesday.at("09:00").do(send_daily_notification)
+    schedule.every().wednesday.at("09:00").do(send_daily_notification)
+    schedule.every().thursday.at("09:00").do(send_daily_notification)
+    schedule.every().friday.at("09:00").do(send_daily_notification)
+    print("[Scheduler] Started — Mon–Fri at 09:00 IST")
 
     def _run():
         while True:
@@ -353,5 +381,4 @@ def start_scheduler():
 
 
 if __name__ == "__main__":
-    # Test immediately — run this locally to preview the message
     send_daily_notification()

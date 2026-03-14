@@ -14,7 +14,7 @@ load_dotenv()
 
 # ─── CONFIG ───────────────────────────────────────────────
 JIRA_EMAIL    = os.getenv("JIRA_EMAIL", "")
-JIRA_TOKEN    = os.getenv("JIRA_API_TOKEN", "")
+JIRA_TOKEN    = os.getenv("JIRA_API_TOKEN", "").replace("\n", "").replace("\r", "").replace(" ", "").strip()
 JIRA_BASE     = os.getenv("JIRA_BASE_URL", "https://minehub.atlassian.net")
 SLACK_WEBHOOK = os.getenv("SLACK_WEBHOOK_URL", "")
 DASHBOARD_PIN = os.getenv("DASHBOARD_PIN", "")

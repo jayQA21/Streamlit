@@ -367,15 +367,60 @@ def render_overview(m):
 
     col1, col2 = st.columns(2)
     with col1:
-        st.markdown("**🍩 Status Distribution**")
-        status_data = [(s, m["sc"].get(s,0)) for s in STATUS_ORDER if m["sc"].get(s,0)>0]
+        # ── Attractive grouped donut chart ──
+        # Group into 5 clean categories for clarity
+        done_ct2   = len(m["done"])
+        review_ct  = m["sc"].get("PO review",0) + m["sc"].get("Tech review",0) + m["sc"].get("Tech strategy",0)
+        qa_ct      = m["sc"].get("PO/QA Test run",0)
+        active_ct  = m["sc"].get("In Progress",0) + m["sc"].get("AIM OF THE DAY",0) + m["sc"].get("Aim Of The week",0)
+        pending_ct = m["sc"].get("To Do",0) + m["sc"].get("PO not valid",0)
+        blocked_ct2= len(m["blocked"])
+
+        pie_labels = ["✅ Done", "👀 In Review", "🧪 QA Test", "⚡ Active", "📋 Pending", "🚫 Blocked"]
+        pie_values = [done_ct2, review_ct, qa_ct, active_ct, pending_ct, blocked_ct2]
+        pie_colors = ["#10b981", "#818cf8", "#6ee7b7", "#38bdf8", "#64748b", "#f87171"]
+        pie_pulls  = [0.04, 0, 0, 0, 0, 0.06]  # pull out Done and Blocked slightly
+
         fig = go.Figure(go.Pie(
-            labels=[s[0] for s in status_data], values=[s[1] for s in status_data], hole=0.55,
-            marker=dict(colors=[STATUS_COLORS.get(s[0],"#475569") for s in status_data]),
-            textinfo="label+value", textfont=dict(size=10),
-            hovertemplate="<b>%{label}</b><br>%{value} tickets<extra></extra>"))
-        fig.update_layout(showlegend=False, height=260, margin=dict(l=0,r=0,t=10,b=0),
-            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(family="DM Sans", color="#e2e8f0"))
+            labels=pie_labels,
+            values=pie_values,
+            hole=0.62,
+            pull=pie_pulls,
+            marker=dict(
+                colors=pie_colors,
+                line=dict(color="#080c1a", width=3),
+            ),
+            textinfo="none",
+            hovertemplate="<b>%{label}</b><br>%{value} tickets<br>%{percent}<extra></extra>",
+            direction="clockwise",
+            sort=False,
+        ))
+
+        # Center annotation
+        pct_done = round(done_ct2 / total * 100) if total else 0
+        fig.add_annotation(
+            text=f"<b>{pct_done}%</b><br><span style='font-size:11px;'>Done</span>",
+            x=0.5, y=0.5, showarrow=False,
+            font=dict(size=22, color="#10b981", family="DM Sans"),
+            xanchor="center", yanchor="middle",
+        )
+
+        fig.update_layout(
+            showlegend=True,
+            legend=dict(
+                orientation="v",
+                x=1.02, y=0.5,
+                xanchor="left",
+                font=dict(size=11, color="#94a3b8"),
+                bgcolor="rgba(0,0,0,0)",
+                bordercolor="rgba(0,0,0,0)",
+            ),
+            height=300,
+            margin=dict(l=0, r=10, t=10, b=0),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(family="DM Sans", color="#e2e8f0"),
+        )
         st.plotly_chart(fig, use_container_width=True)
 
     with col2:

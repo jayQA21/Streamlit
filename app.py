@@ -4,6 +4,7 @@ import plotly.graph_objects as go
 import pandas as pd
 import re
 import os
+import time
 from datetime import datetime, date
 from dotenv import load_dotenv
 
@@ -91,74 +92,90 @@ def check_pin():
 
     st.markdown("""
     <style>
-    @keyframes float { 0%,100%{transform:translateY(0px)} 50%{transform:translateY(-18px)} }
-    @keyframes glow  { 0%,100%{text-shadow:0 0 20px #a78bfa,0 0 40px #a78bfa} 50%{text-shadow:0 0 40px #f472b6,0 0 80px #f472b6,0 0 120px #f472b6} }
-    @keyframes shimmer { 0%{background-position:-200% center} 100%{background-position:200% center} }
-    @keyframes spin { to{transform:rotate(360deg)} }
-    @keyframes orbit { to{transform:rotate(360deg) translateX(80px) rotate(-360deg)} }
-    @keyframes pulse2 { 0%,100%{opacity:.4;transform:scale(1)} 50%{opacity:1;transform:scale(1.05)} }
-    @keyframes fadeUp { from{opacity:0;transform:translateY(30px)} to{opacity:1;transform:translateY(0)} }
-    @keyframes particle { 0%{transform:translateY(0) translateX(0);opacity:1} 100%{transform:translateY(-120px) translateX(var(--dx));opacity:0} }
+    @keyframes float    { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-16px)} }
+    @keyframes shimmer  { 0%{background-position:-300% center} 100%{background-position:300% center} }
+    @keyframes pulse3   { 0%,100%{opacity:.3;transform:scale(1)} 50%{opacity:.7;transform:scale(1.08)} }
+    @keyframes fadeUp   { from{opacity:0;transform:translateY(28px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes confetti {
+        0%  { transform: translateY(-10px) rotate(0deg);   opacity: 1; }
+        100%{ transform: translateY(110vh) rotate(720deg); opacity: 0; }
+    }
+    @keyframes spin2 { to{ transform: rotate(360deg); } }
 
-    .login-bg {
+    .login-wrap {
         position:fixed;top:0;left:0;width:100%;height:100%;
-        background: radial-gradient(ellipse at 30% 20%, #0a2a4a 0%, #051525 50%, #020d18 100%);
-        z-index:-1;
+        background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%);
+        overflow:hidden;
     }
-    .orb1 {
-        position:fixed;top:-100px;right:-100px;width:400px;height:400px;border-radius:50%;
-        background:radial-gradient(circle, rgba(0,212,255,0.15) 0%, transparent 70%);
-        animation:pulse2 4s ease-in-out infinite;
+    .orb-a {
+        position:fixed;top:-120px;right:-80px;width:420px;height:420px;border-radius:50%;
+        background:radial-gradient(circle, rgba(0,212,255,0.12) 0%, transparent 70%);
+        animation:pulse3 5s ease-in-out infinite;
     }
-    .orb2 {
-        position:fixed;bottom:-150px;left:-100px;width:500px;height:500px;border-radius:50%;
-        background:radial-gradient(circle, rgba(16,185,129,0.1) 0%, transparent 70%);
-        animation:pulse2 6s ease-in-out infinite reverse;
+    .orb-b {
+        position:fixed;bottom:-180px;left:-120px;width:520px;height:520px;border-radius:50%;
+        background:radial-gradient(circle, rgba(16,185,129,0.09) 0%, transparent 70%);
+        animation:pulse3 7s ease-in-out infinite reverse;
     }
-    .orb3 {
-        position:fixed;top:40%;left:10%;width:200px;height:200px;border-radius:50%;
-        background:radial-gradient(circle, rgba(56,189,248,0.08) 0%, transparent 70%);
-        animation:pulse2 8s ease-in-out infinite;
+    .orb-c {
+        position:fixed;top:45%;left:5%;width:180px;height:180px;border-radius:50%;
+        background:radial-gradient(circle, rgba(56,189,248,0.07) 0%, transparent 70%);
+        animation:pulse3 9s ease-in-out infinite;
+    }
+    .grid-lines {
+        position:fixed;top:0;left:0;width:100%;height:100%;
+        background-image: linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px),
+                          linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
+        background-size: 60px 60px;
     }
     .login-card {
-        animation: fadeUp 0.8s cubic-bezier(0.16,1,0.3,1) both;
+        animation: fadeUp 0.7s cubic-bezier(0.16,1,0.3,1) both;
     }
-    .rocket-icon {
-        font-size:72px;
+    .rocket {
+        font-size:68px;
         animation:float 3s ease-in-out infinite;
         display:block;
-        filter:drop-shadow(0 0 24px rgba(0,212,255,0.9)) drop-shadow(0 0 48px rgba(16,185,129,0.4));
+        filter:drop-shadow(0 0 18px rgba(0,212,255,0.9)) drop-shadow(0 0 40px rgba(16,185,129,0.5));
     }
     .login-title {
-        font-size:42px !important;
-        font-weight:900 !important;
-        background:linear-gradient(135deg, #00d4ff, #10b981, #38bdf8, #00d4ff) !important;
-        background-size:300% auto !important;
-        -webkit-background-clip:text !important;
-        -webkit-text-fill-color:transparent !important;
-        animation:shimmer 4s linear infinite, glow 3s ease-in-out infinite !important;
-        letter-spacing:-1px !important;
+        font-size:40px !important; font-weight:900 !important;
+        background: linear-gradient(90deg, #00d4ff, #10b981, #38bdf8, #00d4ff) !important;
+        background-size: 300% auto !important;
+        -webkit-background-clip: text !important;
+        -webkit-text-fill-color: transparent !important;
+        animation: shimmer 4s linear infinite !important;
+        letter-spacing: -1px !important;
     }
-    .login-sub { color:#6b7280;font-size:14px;letter-spacing:2px;text-transform:uppercase; }
-    .pin-line {
-        width:60px;height:3px;margin:20px auto;
+    .divider-line {
+        width:50px;height:3px;margin:16px auto;
         background:linear-gradient(90deg,#00d4ff,#10b981);
         border-radius:99px;
     }
+    .confetti-piece {
+        position:fixed;
+        width:10px;height:10px;
+        border-radius:2px;
+        animation: confetti 3s ease-in forwards;
+        z-index:9999;
+    }
     </style>
-    <div class="login-bg"></div>
-    <div class="orb1"></div>
-    <div class="orb2"></div>
-    <div class="orb3"></div>
-    <div class="login-card" style="max-width:420px;margin:60px auto 0;text-align:center;padding:0 20px;">
-        <span class="rocket-icon">🚀</span>
-        <div style="margin-top:24px;">
+    <div class="login-wrap"></div>
+    <div class="orb-a"></div><div class="orb-b"></div><div class="orb-c"></div>
+    <div class="grid-lines"></div>
+    <div class="login-card" style="max-width:400px;margin:50px auto 0;text-align:center;padding:0 24px;position:relative;z-index:10;">
+        <span class="rocket">🚀</span>
+        <div style="margin-top:20px;">
             <div class="login-title">Jules Dashboard</div>
-            <div class="pin-line"></div>
-            <div class="login-sub">MineHub · Sprint Intelligence</div>
+            <div class="divider-line"></div>
+            <div style="color:#4b6a7a;font-size:11px;letter-spacing:2.5px;text-transform:uppercase;margin-top:4px;">
+                Sprint Intelligence · MineHub
+            </div>
         </div>
-        <div style="margin-top:32px;background:rgba(255,255,255,0.03);border:1px solid rgba(0,212,255,0.2);border-radius:20px;padding:32px 28px;backdrop-filter:blur(20px);">
-            <p style="color:#9ca3af;font-size:13px;margin-bottom:20px;letter-spacing:1px;">🔐 ENTER ACCESS PIN</p>
+        <div style="margin-top:28px;background:rgba(0,0,0,0.25);border:1px solid rgba(0,212,255,0.15);
+             border-radius:20px;padding:28px 24px;backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);">
+            <p style="color:#4b7a8a;font-size:11px;letter-spacing:2px;margin-bottom:18px;text-transform:uppercase;">
+                🔐 &nbsp; Enter Access PIN
+            </p>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -168,35 +185,56 @@ def check_pin():
         st.markdown("""
         <style>
         div[data-testid="stTextInput"] input {
-            background: rgba(255,255,255,0.04) !important;
+            background: rgba(0,0,0,0.3) !important;
             border: 1px solid rgba(0,212,255,0.3) !important;
-            border-radius: 12px !important;
+            border-radius: 14px !important;
             color: #e2e8f0 !important;
-            font-size: 20px !important;
+            font-size: 22px !important;
             text-align: center !important;
-            letter-spacing: 8px !important;
-            padding: 14px !important;
+            letter-spacing: 10px !important;
+            padding: 16px !important;
+            transition: all 0.3s !important;
         }
         div[data-testid="stTextInput"] input:focus {
             border-color: rgba(0,212,255,0.7) !important;
-            box-shadow: 0 0 20px rgba(0,212,255,0.25) !important;
+            box-shadow: 0 0 24px rgba(0,212,255,0.2), inset 0 0 12px rgba(0,212,255,0.05) !important;
+            outline: none !important;
         }
+        div[data-testid="stTextInput"] input::placeholder { color: #1e3a4a !important; letter-spacing: 6px !important; }
         </style>
         """, unsafe_allow_html=True)
+
         pin = st.text_input("pin", type="password", placeholder="· · · ·", label_visibility="collapsed")
-        st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
-        if st.button("✦ Enter Dashboard", use_container_width=True):
+        st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+
+        if st.button("✦  Enter Dashboard", use_container_width=True):
             if pin == DASHBOARD_PIN:
+                # CSS confetti burst instead of balloons
+                st.markdown("""
+                <style>
+                @keyframes confetti { 0%{transform:translateY(-10px) rotate(0deg);opacity:1} 100%{transform:translateY(110vh) rotate(720deg);opacity:0} }
+                </style>
+                <div id="confetti-box">
+                """ + "".join([
+                    f'<div class="confetti-piece" style="left:{i*5+2}%;top:-5%;background:{"#00d4ff" if i%4==0 else "#10b981" if i%4==1 else "#38bdf8" if i%4==2 else "#a78bfa"};animation-delay:{i*0.08:.2f}s;animation-duration:{2.5+i*0.1:.1f}s;transform:rotate({i*17}deg);"></div>'
+                    for i in range(20)
+                ]) + """
+                </div>
+                """, unsafe_allow_html=True)
+                time.sleep(1.5)
                 st.session_state.authenticated = True
-                st.balloons()
-                time.sleep(2)
                 st.rerun()
             else:
-                st.error("⚠️ Incorrect PIN — try again")
-    
+                st.markdown("""
+                <div style="background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.3);
+                     border-radius:10px;padding:10px 16px;text-align:center;color:#fca5a5;font-size:13px;margin-top:8px;">
+                    ⚠️ &nbsp; Incorrect PIN — please try again
+                </div>
+                """, unsafe_allow_html=True)
+
     st.markdown("""
-    <div style="text-align:center;margin-top:32px;color:#374151;font-size:11px;letter-spacing:1px;">
-        JULES PRODUCT · MINEHUB · RELEASE SPRINT 3
+    <div style="text-align:center;margin-top:36px;color:#1e3a4a;font-size:10px;letter-spacing:1.5px;position:relative;z-index:10;">
+        JULES PRODUCT &nbsp;·&nbsp; MINEHUB &nbsp;·&nbsp; RELEASE SPRINT 3
     </div>
     """, unsafe_allow_html=True)
     return False

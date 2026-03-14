@@ -110,22 +110,41 @@ def clean_title(s):
 def fetch_jira_tickets():
     url = f"{JIRA_BASE}/rest/api/3/search/jql"
     auth = (JIRA_EMAIL, JIRA_TOKEN)
-    params = {"jql": f"project = {PROJECT} AND sprint in openSprints() ORDER BY created DESC",
-              "maxResults": 100, "fields": "summary,status,assignee,customfield_10024,issuetype"}
-    resp = requests.get(url, headers={"Accept": "application/json"}, auth=auth, params=params, timeout=20)
-    resp.raise_for_status()
+    headers = {"Accept": "application/json"}
     tickets = []
-    for issue in resp.json().get("issues", []):
-        f = issue.get("fields", {})
-        raw_sp = f.get("customfield_10024")
-        tickets.append({
-            "key":      issue["key"],
-            "summary":  clean_title(f.get("summary", "")),
-            "status":   f.get("status", {}).get("name", "Unknown"),
-            "assignee": (f.get("assignee") or {}).get("displayName", "Unassigned"),
-            "sp":       int(raw_sp) if raw_sp is not None else None,
-            "type":     f.get("issuetype", {}).get("name", ""),
-        })
+    next_page_token = None
+
+    while True:
+        params = {
+            "jql": f"project = {PROJECT} AND sprint in openSprints() ORDER BY created DESC",
+            "maxResults": 100,
+            "fields": "summary,status,assignee,customfield_10024,issuetype",
+        }
+        if next_page_token:
+            params["nextPageToken"] = next_page_token
+
+        resp = requests.get(url, headers=headers, auth=auth, params=params, timeout=30)
+        resp.raise_for_status()
+        data = resp.json()
+
+        for issue in data.get("issues", []):
+            f = issue.get("fields", {})
+            raw_sp = f.get("customfield_10024")
+            tickets.append({
+                "key":      issue["key"],
+                "summary":  clean_title(f.get("summary", "")),
+                "status":   f.get("status", {}).get("name", "Unknown"),
+                "assignee": (f.get("assignee") or {}).get("displayName", "Unassigned"),
+                "sp":       int(raw_sp) if raw_sp is not None else None,
+                "type":     f.get("issuetype", {}).get("name", ""),
+            })
+
+        if data.get("isLast", True):
+            break
+        next_page_token = data.get("nextPageToken")
+        if not next_page_token:
+            break
+
     return tickets
 
 

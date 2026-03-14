@@ -31,7 +31,7 @@ SPRINT_DAYS   = 48
 DONE_STATUSES    = {"Done", "PO/QA VALID", "In demo", "In production", "CS reviewed", "Demo", "In Production", "CS Reviewed"}
 BLOCKED_STATUSES = {"Blocked"}
 ACTIVE_STATUSES  = {"In Progress", "AIM OF THE DAY", "Tech review", "PO review",
-                     "PO/QA Test run", "Aim Of The week", "PO not valid"}
+                     "PO/QA Test run", "Aim Of The week", "PO not valid", "Tech strategy"}
 
 DEV_COLORS = {
     "Nikita Vaidya": "#818cf8",
@@ -247,7 +247,13 @@ def render_overview(m):
             ("⚡ Active", m["sc"].get("In Progress",0)+m["sc"].get("AIM OF THE DAY",0), "#38bdf8"),
             ("📅 Aim of Week", m["sc"].get("Aim Of The week",0), "#bae6fd"),
             ("📋 To Do", m["sc"].get("To Do",0), "#64748b"),
-            ("🚫 Blocked", blocked_ct, "#f87171"),
+            ("⚠️ PO Not Valid", m["sc"].get("PO not valid",0), "#f97316"),
+            ("🔬 Tech Strategy", m["sc"].get("Tech strategy",0), "#a78bfa"),
+            ("⚠️ PO Not Valid", m["sc"].get("PO not valid",0), "#f97316"),
+        ("🔬 Tech Strategy", m["sc"].get("Tech strategy",0), "#a78bfa"),
+        ("⚠️ PO Not Valid", m["sc"].get("PO not valid",0), "#f97316"),
+        ("🔬 Tech Strategy", m["sc"].get("Tech strategy",0), "#a78bfa"),
+        ("🚫 Blocked", blocked_ct, "#f87171"),
         ]
         for label, val, color in groups:
             pct_bar = (val/total*100) if total else 0

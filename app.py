@@ -48,8 +48,9 @@ STATUS_COLORS = {
     "To Do": "#64748b", "Blocked": "#f87171", "PO not valid": "#f97316",
 }
 STATUS_ORDER = [
-    "Done", "PO/QA VALID", "Demo", "In Production", "CS Reviewed",
-    "PO/QA Test run", "Tech review", "PO review",
+    "Done", "PO/QA VALID", "In demo", "In production", "CS reviewed",
+    "Demo", "In Production", "CS Reviewed",
+    "PO/QA Test run", "Tech review", "PO review", "Tech strategy",
     "AIM OF THE DAY", "In Progress", "Aim Of The week",
     "To Do", "Blocked", "PO not valid",
 ]

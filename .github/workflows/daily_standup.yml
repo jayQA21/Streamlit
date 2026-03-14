@@ -1,0 +1,28 @@
+name: Jules Daily Standup
+
+on:
+  schedule:
+    - cron: '0 9 * * 1-5'  # 9:00 AM UTC Mon–Fri
+  workflow_dispatch:         # manual trigger button on GitHub
+
+jobs:
+  send-notification:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests python-dotenv
+
+      - name: Send daily standup
+        env:
+          JIRA_EMAIL:        ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN:    ${{ secrets.JIRA_API_TOKEN }}
+          JIRA_BASE_URL:     ${{ secrets.JIRA_BASE_URL }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          DASHBOARD_URL:     ${{ secrets.DASHBOARD_URL }}
+        run: python scheduler.py

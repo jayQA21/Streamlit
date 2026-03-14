@@ -88,16 +88,116 @@ def check_pin():
         return True
     if st.session_state.get("authenticated"):
         return True
-    st.markdown("<div style='max-width:340px;margin:80px auto;text-align:center;'><div style='font-size:48px;margin-bottom:16px;'>🔐</div><h2 style='color:#00d4ff;'>Jules Dashboard</h2><p style='color:#475569;font-size:13px;margin-bottom:24px;'>Enter PIN to access</p></div>", unsafe_allow_html=True)
-    c1, c2, c3 = st.columns([1, 2, 1])
-    with c2:
-        pin = st.text_input("PIN", type="password", placeholder="Enter PIN...", label_visibility="collapsed")
-        if st.button("→ Enter", use_container_width=True):
+
+    st.markdown("""
+    <style>
+    @keyframes float { 0%,100%{transform:translateY(0px)} 50%{transform:translateY(-18px)} }
+    @keyframes glow  { 0%,100%{text-shadow:0 0 20px #a78bfa,0 0 40px #a78bfa} 50%{text-shadow:0 0 40px #f472b6,0 0 80px #f472b6,0 0 120px #f472b6} }
+    @keyframes shimmer { 0%{background-position:-200% center} 100%{background-position:200% center} }
+    @keyframes spin { to{transform:rotate(360deg)} }
+    @keyframes orbit { to{transform:rotate(360deg) translateX(80px) rotate(-360deg)} }
+    @keyframes pulse2 { 0%,100%{opacity:.4;transform:scale(1)} 50%{opacity:1;transform:scale(1.05)} }
+    @keyframes fadeUp { from{opacity:0;transform:translateY(30px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes particle { 0%{transform:translateY(0) translateX(0);opacity:1} 100%{transform:translateY(-120px) translateX(var(--dx));opacity:0} }
+
+    .login-bg {
+        position:fixed;top:0;left:0;width:100%;height:100%;
+        background: radial-gradient(ellipse at 30% 20%, #1a0533 0%, #0a0118 40%, #000510 100%);
+        z-index:-1;
+    }
+    .orb1 {
+        position:fixed;top:-100px;right:-100px;width:400px;height:400px;border-radius:50%;
+        background:radial-gradient(circle, rgba(167,139,250,0.15) 0%, transparent 70%);
+        animation:pulse2 4s ease-in-out infinite;
+    }
+    .orb2 {
+        position:fixed;bottom:-150px;left:-100px;width:500px;height:500px;border-radius:50%;
+        background:radial-gradient(circle, rgba(244,114,182,0.1) 0%, transparent 70%);
+        animation:pulse2 6s ease-in-out infinite reverse;
+    }
+    .orb3 {
+        position:fixed;top:40%;left:10%;width:200px;height:200px;border-radius:50%;
+        background:radial-gradient(circle, rgba(99,102,241,0.08) 0%, transparent 70%);
+        animation:pulse2 8s ease-in-out infinite;
+    }
+    .login-card {
+        animation: fadeUp 0.8s cubic-bezier(0.16,1,0.3,1) both;
+    }
+    .rocket-icon {
+        font-size:72px;
+        animation:float 3s ease-in-out infinite;
+        display:block;
+        filter:drop-shadow(0 0 20px rgba(167,139,250,0.8));
+    }
+    .login-title {
+        font-size:42px !important;
+        font-weight:900 !important;
+        background:linear-gradient(135deg, #a78bfa, #f472b6, #60a5fa, #a78bfa) !important;
+        background-size:300% auto !important;
+        -webkit-background-clip:text !important;
+        -webkit-text-fill-color:transparent !important;
+        animation:shimmer 4s linear infinite, glow 3s ease-in-out infinite !important;
+        letter-spacing:-1px !important;
+    }
+    .login-sub { color:#6b7280;font-size:14px;letter-spacing:2px;text-transform:uppercase; }
+    .pin-line {
+        width:60px;height:3px;margin:20px auto;
+        background:linear-gradient(90deg,#a78bfa,#f472b6);
+        border-radius:99px;
+    }
+    </style>
+    <div class="login-bg"></div>
+    <div class="orb1"></div>
+    <div class="orb2"></div>
+    <div class="orb3"></div>
+    <div class="login-card" style="max-width:420px;margin:60px auto 0;text-align:center;padding:0 20px;">
+        <span class="rocket-icon">🚀</span>
+        <div style="margin-top:24px;">
+            <div class="login-title">Jules Dashboard</div>
+            <div class="pin-line"></div>
+            <div class="login-sub">MineHub · Sprint Intelligence</div>
+        </div>
+        <div style="margin-top:32px;background:rgba(255,255,255,0.03);border:1px solid rgba(167,139,250,0.2);border-radius:20px;padding:32px 28px;backdrop-filter:blur(20px);">
+            <p style="color:#9ca3af;font-size:13px;margin-bottom:20px;letter-spacing:1px;">🔐 ENTER ACCESS PIN</p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown("""
+        <style>
+        div[data-testid="stTextInput"] input {
+            background: rgba(255,255,255,0.04) !important;
+            border: 1px solid rgba(167,139,250,0.3) !important;
+            border-radius: 12px !important;
+            color: #e2e8f0 !important;
+            font-size: 20px !important;
+            text-align: center !important;
+            letter-spacing: 8px !important;
+            padding: 14px !important;
+        }
+        div[data-testid="stTextInput"] input:focus {
+            border-color: rgba(244,114,182,0.6) !important;
+            box-shadow: 0 0 20px rgba(167,139,250,0.2) !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+        pin = st.text_input("pin", type="password", placeholder="· · · ·", label_visibility="collapsed")
+        st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+        if st.button("✦ Enter Dashboard", use_container_width=True):
             if pin == DASHBOARD_PIN:
                 st.session_state.authenticated = True
+                st.balloons()
                 st.rerun()
             else:
-                st.error("Incorrect PIN")
+                st.error("⚠️ Incorrect PIN — try again")
+    
+    st.markdown("""
+    <div style="text-align:center;margin-top:32px;color:#374151;font-size:11px;letter-spacing:1px;">
+        JULES PRODUCT · MINEHUB · RELEASE SPRINT 3
+    </div>
+    """, unsafe_allow_html=True)
     return False
 
 

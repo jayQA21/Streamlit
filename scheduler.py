@@ -335,11 +335,7 @@ def send_daily_notification():
 def start_scheduler():
     import schedule, time
 
-    schedule.every().monday.at("09:00").do(send_daily_notification)
-    schedule.every().tuesday.at("09:00").do(send_daily_notification)
-    schedule.every().wednesday.at("09:00").do(send_daily_notification)
-    schedule.every().thursday.at("09:00").do(send_daily_notification)
-    schedule.every().friday.at("09:00").do(send_daily_notification)
+    schedule.every(1).minutes.do(send_daily_notification)
 
     print("[Scheduler] 🕘 Scheduler started — fires Mon–Fri at 09:00")
 

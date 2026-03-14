@@ -13,11 +13,17 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ─── CONFIG ───────────────────────────────────────────────
-JIRA_EMAIL    = os.getenv("JIRA_EMAIL", "")
-JIRA_TOKEN    = os.getenv("JIRA_API_TOKEN", "").replace("\n", "").replace("\r", "").replace(" ", "").strip()
-JIRA_BASE     = os.getenv("JIRA_BASE_URL", "https://minehub.atlassian.net")
-SLACK_WEBHOOK = os.getenv("SLACK_WEBHOOK_URL", "")
-DASHBOARD_PIN = os.getenv("DASHBOARD_PIN", "")
+def get_secret(key, default=""):
+    try:
+        return st.secrets[key]
+    except:
+        return os.getenv(key, default)
+
+JIRA_EMAIL    = get_secret("JIRA_EMAIL")
+JIRA_TOKEN    = get_secret("JIRA_API_TOKEN").replace("\n","").replace("\r","").replace(" ","").strip()
+JIRA_BASE     = get_secret("JIRA_BASE_URL", "https://minehub.atlassian.net")
+SLACK_WEBHOOK = get_secret("SLACK_WEBHOOK_URL")
+DASHBOARD_PIN = get_secret("DASHBOARD_PIN")
 
 CLOUD_ID      = "7a6832b7-8317-4cb3-b886-1a6da3749a41"
 PROJECT       = "JENG"

@@ -359,45 +359,48 @@ def render_overview(m):
             """, unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # ── FIX: Team Workload — blocked_html extracted BEFORE f-string ──
-    st.markdown('<div class="dash-card">', unsafe_allow_html=True)
-    st.markdown("**👥 Team Workload**")
-    dev_cols = st.columns(4)
+    # Team Workload — single HTML block (avoids Streamlit column escaping bug)
     devs = [(n, d) for n, d in m["dev_map"].items() if n != "Unassigned"]
     devs.sort(key=lambda x: x[1]["total"], reverse=True)
-    for i, (name, d) in enumerate(devs):
+    cards_html = ""
+    for name, d in devs:
         color = DEV_COLORS.get(name, "#64748b")
         pct = round((d["done"] / d["total"]) * 100) if d["total"] else 0
         initials = "".join(p[0] for p in name.split()[:2])
         first_name = name.split()[0]
         last_initial = name.split()[1][0] if len(name.split()) > 1 else ""
-        # FIX: build blocked badge outside f-string
-        blocked_badge = f"<div style='font-size:9px;color:#f87171;font-weight:700;margin-bottom:5px;'>⚠️ {d['blocked']} BLOCKED</div>" if d['blocked'] >= 2 else ""
-        with dev_cols[i % 4]:
-            st.markdown(f"""
-            <div style="background:{color}08;border:1px solid {color}25;border-radius:12px;padding:14px;">
-                {blocked_badge}
-                <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-                    <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,{color},{color}70);
-                         display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#0a0e1a;">{initials}</div>
-                    <div>
-                        <div style="font-weight:700;font-size:12px;">{first_name} {last_initial}.</div>
-                        <div style="font-size:9px;color:#475569;">{d['total']} tickets · {d['totalSP']} SP</div>
-                    </div>
-                    <div style="margin-left:auto;font-size:18px;font-weight:900;color:{color};font-family:'Space Mono',monospace;">{pct}%</div>
+        blocked_badge = f"<div style='font-size:9px;color:#f87171;font-weight:700;margin-bottom:6px;'>⚠️ {d['blocked']} BLOCKED</div>" if d["blocked"] >= 2 else ""
+        cards_html += f"""
+        <div style="flex:1;min-width:200px;background:{color}08;border:1px solid {color}25;border-radius:12px;padding:14px;">
+            {blocked_badge}
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,{color},{color}70);
+                     display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#0a0e1a;">{initials}</div>
+                <div style="flex:1;">
+                    <div style="font-weight:700;font-size:12px;">{first_name} {last_initial}.</div>
+                    <div style="font-size:9px;color:#475569;">{d["total"]} tickets &middot; {d["totalSP"]} SP</div>
                 </div>
-                <div style="background:#1e2d47;border-radius:999px;height:4px;margin-bottom:8px;">
-                    <div style="width:{pct}%;height:100%;border-radius:999px;background:{color};"></div>
-                </div>
-                <div style="display:flex;gap:4px;flex-wrap:wrap;">
-                    <span style="background:#10b98110;border:1px solid #10b98122;border-radius:4px;padding:2px 6px;font-size:8px;color:#10b981;font-weight:700;">✅ {d['done']}</span>
-                    <span style="background:#38bdf810;border:1px solid #38bdf822;border-radius:4px;padding:2px 6px;font-size:8px;color:#38bdf8;font-weight:700;">⚡ {d['active']}</span>
-                    <span style="background:#f8717110;border:1px solid #f8717122;border-radius:4px;padding:2px 6px;font-size:8px;color:#f87171;font-weight:700;">🚫 {d['blocked']}</span>
-                    <span style="background:#64748b10;border:1px solid #64748b22;border-radius:4px;padding:2px 6px;font-size:8px;color:#64748b;font-weight:700;">📋 {d['todo']}</span>
-                </div>
+                <div style="font-size:18px;font-weight:900;color:{color};font-family:'Space Mono',monospace;">{pct}%</div>
             </div>
-            """, unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+            <div style="background:#1e2d47;border-radius:999px;height:4px;margin-bottom:8px;">
+                <div style="width:{pct}%;height:100%;border-radius:999px;background:{color};"></div>
+            </div>
+            <div style="display:flex;gap:4px;flex-wrap:wrap;">
+                <span style="background:#10b98110;border:1px solid #10b98122;border-radius:4px;padding:2px 6px;font-size:8px;color:#10b981;font-weight:700;">Done {d["done"]}</span>
+                <span style="background:#38bdf810;border:1px solid #38bdf822;border-radius:4px;padding:2px 6px;font-size:8px;color:#38bdf8;font-weight:700;">Active {d["active"]}</span>
+                <span style="background:#f8717110;border:1px solid #f8717122;border-radius:4px;padding:2px 6px;font-size:8px;color:#f87171;font-weight:700;">Blocked {d["blocked"]}</span>
+                <span style="background:#64748b10;border:1px solid #64748b22;border-radius:4px;padding:2px 6px;font-size:8px;color:#64748b;font-weight:700;">Todo {d["todo"]}</span>
+            </div>
+        </div>"""
+
+    st.markdown(f"""
+    <div style="background:rgba(15,22,41,0.9);border:1px solid rgba(0,212,255,0.1);border-radius:16px;padding:20px 22px;margin-bottom:12px;">
+        <div style="font-weight:700;margin-bottom:14px;">&#128101; Team Workload</div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;">
+            {cards_html}
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 
 # ─── BURNDOWN TAB ─────────────────────────────────────────

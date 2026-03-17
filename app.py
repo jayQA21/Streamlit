@@ -904,6 +904,9 @@ def main():
         selected_sprint_id   = sprint_options[selected_label]
         selected_sprint_name = selected_label.split("  ·")[0].lstrip("🟢✅ ").strip()
 
+        # Calculate sprint_info immediately after selection — fixes UnboundLocalError
+        sprint_info = next((s for s in available_sprints if s["id"] == selected_sprint_id), None)
+
         # Show carried-over warning
         if selected_sprint_id:
             st.caption("📌 Tickets from previous sprints are tagged as carried over")
@@ -972,8 +975,7 @@ def main():
     if not show_carried:
         tickets = [t for t in tickets if not t.get("carried_over", False)]
 
-    # Build sprint dates from selected sprint
-    sprint_info = next((s for s in available_sprints if s["id"] == selected_sprint_id), None)
+    # Build sprint dates from selected sprint (sprint_info already set in sidebar)
     if sprint_info and sprint_info.get("start"):
         sel_start = date.fromisoformat(sprint_info["start"])
         sel_end   = date.fromisoformat(sprint_info["end"]) if sprint_info.get("end") else date.today()

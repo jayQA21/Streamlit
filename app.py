@@ -980,6 +980,8 @@ def main():
         sel_days  = SPRINT_DAYS
 
     m = build_metrics(tickets, sprint_start=sel_start, sprint_days=sel_days)
+    # Pre-calculate carried_ct here so it's available in controls row
+    carried_ct = sum(1 for t in tickets if t.get("carried_over", False))
 
     if auto_slack and SLACK_WEBHOOK and m["blocked"]:
         ok, _ = post_to_slack(m["blocked"], m)
@@ -1072,6 +1074,8 @@ def main():
     if not show_carried:
         tickets = [t for t in tickets if not t.get("carried_over", False)]
         m = build_metrics(tickets, sprint_start=sel_start, sprint_days=sel_days)
+    # Pre-calculate carried_ct here so it's available in controls row
+    carried_ct = sum(1 for t in tickets if t.get("carried_over", False))
 
     with tab1: render_overview(m, tickets)
     with tab2: render_burndown(m)

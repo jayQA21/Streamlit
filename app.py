@@ -615,6 +615,15 @@ def post_to_slack(blocked, m):
 
 # ─── OVERVIEW TAB ─────────────────────────────────────────
 def render_overview(m, tickets=[]):
+    if not m["total"]:
+        st.markdown("""
+        <div style="text-align:center;padding:60px 20px;color:#475569;">
+            <div style="font-size:48px;margin-bottom:16px;">🔍</div>
+            <div style="font-size:16px;font-weight:700;color:#64748b;">No tickets found</div>
+            <div style="font-size:13px;margin-top:8px;">No tickets match the selected fix version or sprint filter.</div>
+            <div style="font-size:11px;margin-top:6px;color:#334155;">Try selecting "All Fix Versions" or a different sprint.</div>
+        </div>""", unsafe_allow_html=True)
+        return
     total = m["total"]; done_ct = len(m["done"]); blocked_ct = len(m["blocked"])
     carried_ct = sum(1 for t in tickets if t.get("carried_over", False))
 
@@ -734,6 +743,9 @@ def render_overview(m, tickets=[]):
     st.markdown('<div class="section-header">👥 Team Workload</div>', unsafe_allow_html=True)
     devs = [(n,d) for n,d in m["dev_map"].items() if n!="Unassigned"]
     devs.sort(key=lambda x: x[1]["total"], reverse=True)
+    if not devs:
+        st.info("No tickets match the selected filters.", icon="🔍")
+        return
     cols = st.columns(len(devs))
     for i, (name, d) in enumerate(devs):
         color = DEV_COLORS.get(name, "#64748b")
@@ -816,6 +828,9 @@ def render_velocity(m):
     devs = [(n,d) for n,d in m["dev_map"].items() if n!="Unassigned"]
     devs.sort(key=lambda x: x[1]["total"], reverse=True)
     st.markdown('<div class="section-header">⚡ Developer Velocity</div>', unsafe_allow_html=True)
+    if not devs:
+        st.info("No tickets match the selected filters.", icon="🔍")
+        return
     names = [n.split()[0] for n,_ in devs]
     fig = go.Figure()
     for lbl, key, clr in [("Done","done","#10b981"),("Active","active","#38bdf8"),("Blocked","blocked","#f87171"),("Todo","todo","#334155")]:
@@ -828,6 +843,12 @@ def render_velocity(m):
         margin=dict(l=0,r=0,t=10,b=40))
     st.plotly_chart(fig, use_container_width=True)
 
+    if not devs:
+        st.info("No tickets match the selected filters.", icon="🔍")
+        return
+    if not devs:
+        st.info("No tickets match the selected filters.", icon="🔍")
+        return
     cols = st.columns(len(devs))
     for i, (name, d) in enumerate(devs):
         color = DEV_COLORS.get(name,"#64748b")
@@ -856,6 +877,8 @@ def render_velocity(m):
 
 # ─── POINTS TAB ───────────────────────────────────────────
 def render_points(m):
+    if not m["total"]:
+        st.info("No tickets match the selected filters.", icon="🔍"); return
     c = st.columns(5)
     c[0].metric("💎 Total SP", m["total_sp"])
     c[1].metric("✅ SP Done", m["done_sp"], delta=f"{round(m['done_sp']/m['total_sp']*100) if m['total_sp'] else 0}%")
@@ -883,6 +906,8 @@ def render_points(m):
 # ─── ALL TICKETS TAB ──────────────────────────────────────
 def render_tickets(m, tickets=[]):
     tickets = m["tickets"]
+    if not tickets:
+        st.info("No tickets match the selected filters.", icon="🔍"); return
     st.markdown(f"""
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;animation:fadeInUp 0.4s ease both;">
   <div>
@@ -907,10 +932,10 @@ def render_tickets(m, tickets=[]):
             rows += f'<div class="{row_cls}">'
             if t.get("carried_over"):
                 prev_sprints = t.get('sprints', [])
+                journey = ' → '.join(prev_sprints) if prev_sprints else 'prev sprint'
                 src = prev_sprints[0] if prev_sprints else 'prev sprint'
-                all_sprints = ' → '.join(prev_sprints) if prev_sprints else 'prev sprint'
-                rows += f'<span style="font-size:9px;background:rgba(251,191,36,0.12);border:1px solid rgba(251,191,36,0.35);color:#fbbf24;border-radius:4px;padding:1px 6px;margin-right:4px;white-space:nowrap;cursor:help;" title="Sprint history: {all_sprints}">↩ {src}</span>'
-                rows += '<span style="font-size:9px;background:rgba(251,191,36,0.15);border:1px solid rgba(251,191,36,0.4);color:#fbbf24;border-radius:4px;padding:1px 5px;margin-right:4px;white-space:nowrap;">↩ carried</span>'
+                # Single clean badge showing full journey on hover
+                rows += f'<span style="font-size:9px;background:rgba(251,191,36,0.12);border:1px solid rgba(251,191,36,0.35);color:#fbbf24;border-radius:4px;padding:2px 7px;margin-right:4px;white-space:nowrap;cursor:help;flex-shrink:0;" title="🔄 Sprint journey: {journey}">↩ {journey}</span>'
             rows += f'<span class="ticket-key" style="min-width:70px;flex-shrink:0;"><a href="{JIRA_BASE}/browse/{t["key"]}" target="_blank">{t["key"]}</a></span>'
             rows += f'<span style="font-size:9px;color:#7dd3fc;background:rgba(129,140,248,0.1);border-radius:3px;padding:2px 5px;min-width:44px;text-align:center;flex-shrink:0;">{t["type"][:7]}</span>'
             rows += f'<span class="ticket-summary" style="flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;"><a href="{JIRA_BASE}/browse/{t["key"]}" target="_blank">{t["summary"]}</a></span>'
@@ -938,53 +963,25 @@ def main():
             st.cache_data.clear(); st.rerun()
         st.markdown("---")
 
-        # Sprint selector
-        st.markdown("**🏃 Sprint Filter**")
+        # Fetch active sprint info for display
         available_sprints = fetch_available_sprints()
-
-        sprint_options = {"🟢 Current Sprint (Active)": None}
-        for s in available_sprints:
-            state_icon = "🟢" if s["state"] == "active" else "✅"
-            label = f"{state_icon} {s['name']}"
-            if s["end"]:
-                label += f"  ·  {s['end']}"
-            sprint_options[label] = s["id"]
-
-        selected_label = st.selectbox(
-            "Select sprint",
-            options=list(sprint_options.keys()),
-            index=0,
-            label_visibility="collapsed"
-        )
-        selected_sprint_id   = sprint_options[selected_label]
-        selected_sprint_name = selected_label.split("  ·")[0].lstrip("🟢✅ ").strip()
-
-        # Calculate sprint_info immediately after selection — fixes UnboundLocalError
-        sprint_info = next((s for s in available_sprints if s["id"] == selected_sprint_id), None)
-
-        # Show carried-over warning
-        if selected_sprint_id:
-            st.caption("📌 Tickets from previous sprints are tagged as carried over")
+        sprint_info = next((s for s in available_sprints if s["state"] == "active"), None)
+        selected_sprint_name = sprint_info["name"] if sprint_info else "Active Sprint"
 
         st.markdown("---")
         auto_slack = st.toggle("Auto-post blocked to Slack", value=False)
         st.markdown("---")
         # Show selected sprint info
         if sprint_info:
-            state_color = "#10b981" if sprint_info["state"] == "active" else "#64748b"
-            import builtins
-            _dyn    = getattr(builtins, "SPRINT_ACTUAL_DATES_DYNAMIC", {})
-            _actual = _dyn.get(sprint_info.get("name","")) or SPRINT_ACTUAL_DATES.get(sprint_info.get("name",""))
-            _act_str = f'<div style="font-size:9px;color:#fbbf24;margin-top:3px;">⚡ Actual: {_actual[0]} → {_actual[1]} ({(_actual[1]-_actual[0]).days} days)</div>' if _actual else ""
             st.markdown(
                 f'<div style="background:rgba(0,212,255,0.05);border:1px solid rgba(0,212,255,0.15);'
                 f'border-radius:8px;padding:10px 12px;margin-bottom:8px;">'
-                f'<div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:1px;">Selected Sprint</div>'
+                f'<div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:1px;">Active Sprint</div>'
                 f'<div style="color:#e2e8f0;font-weight:700;font-size:13px;margin-top:2px;">{selected_sprint_name}</div>'
                 f'<div style="font-size:10px;margin-top:4px;">'
-                f'<span style="color:{state_color};">● {sprint_info["state"].upper()}</span>'
-                f'<span style="color:#475569;margin-left:8px;">Jira: {sprint_info.get("start","?")} → {sprint_info.get("end","?")}</span>'
-                f'</div>{_act_str}</div>',
+                f'<span style="color:#10b981;">● ACTIVE</span>'
+                f'<span style="color:#475569;margin-left:8px;">{sprint_info.get("start","?")} → {sprint_info.get("end","?")}</span>'
+                f'</div></div>',
                 unsafe_allow_html=True
             )
         st.markdown(f"**Project:** {PROJECT}")
@@ -1026,28 +1023,14 @@ def main():
         return
     placeholder.empty()
 
-    # Build sprint dates — use actual override if available, else Jira dates
+    # Sprint dates — always from active sprint (matches Jira board view)
     if sprint_info and sprint_info.get("start"):
-        jira_start = date.fromisoformat(sprint_info["start"])
-        jira_end   = date.fromisoformat(sprint_info["end"]) if sprint_info.get("end") else date.today()
-        # Check for actual date override — use dynamic dict first, fallback to static
-        import builtins
-        _dynamic = getattr(builtins, "SPRINT_ACTUAL_DATES_DYNAMIC", {})
-        actual = _dynamic.get(sprint_info.get("name", "")) or SPRINT_ACTUAL_DATES.get(sprint_info.get("name", ""))
-        if actual:
-            sel_start, sel_end = actual
-            sel_days = max(1, (sel_end - sel_start).days)
-            actual_override = True
-        else:
-            sel_start = jira_start
-            sel_end   = jira_end
-            sel_days  = max(1, (sel_end - sel_start).days)
-            actual_override = False
+        sel_start = date.fromisoformat(sprint_info["start"])
+        sel_end   = date.fromisoformat(sprint_info["end"]) if sprint_info.get("end") else date.today()
+        sel_days  = max(1, (sel_end - sel_start).days)
     else:
-        sel_start       = SPRINT_START
-        sel_days        = SPRINT_DAYS
-        actual_override = False
-
+        sel_start = SPRINT_START
+        sel_days  = SPRINT_DAYS
     m = build_metrics(tickets, sprint_start=sel_start, sprint_days=sel_days)
     # Pre-calculate carried_ct here so it's available in controls row
     carried_ct = sum(1 for t in tickets if t.get("carried_over", False))
@@ -1076,7 +1059,11 @@ def main():
     st.markdown(f"""<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
 <div><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;"><span class="live-dot"></span><span style="font-size:10px;color:#10b981;text-transform:uppercase;letter-spacing:2px;font-weight:600;">Live · Jira · 5 min cache</span></div>
 <h1 style="font-size:26px;font-weight:900;margin:0;background:linear-gradient(90deg,#00d4ff,#818cf8,#f472b6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:fadeInLeft 0.6s ease both;">Jules Sprint Dashboard<span class="cursor">|</span></h1>
-<div style="font-size:12px;color:#475569;margin-top:4px;">{selected_sprint_name} · {sel_start.strftime("%b %d")} – {(sel_start + pd.Timedelta(days=sel_days)).strftime("%b %d, %Y")} · {fetched_at}</div></div>
+<div style="display:flex;align-items:center;gap:10px;margin-top:6px;flex-wrap:wrap;">
+  <span style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.35);border-radius:6px;padding:3px 10px;font-size:11px;font-weight:700;color:#10b981;">🟢 {selected_sprint_name}</span>
+  <span style="font-size:12px;color:#475569;">{sel_start.strftime("%b %d")} – {(sel_start + pd.Timedelta(days=sel_days)).strftime("%b %d, %Y")}</span>
+  <span style="font-size:11px;color:#334155;">· {fetched_at}</span>
+</div></div>
 <div style="display:flex;gap:10px;flex-wrap:wrap;">
 <div style="background:rgba(0,212,255,0.07);border:1px solid rgba(0,212,255,0.18);border-radius:10px;padding:10px 16px;font-size:12px;color:#7dd3fc;text-align:center;">📅 Day <strong>{m["current_day"]}</strong> / {SPRINT_DAYS}<br><span style="color:#475569;font-size:10px;">{days_left} days left</span></div>
 <div style="background:{sc}12;border:1px solid {sc}35;border-radius:10px;padding:10px 16px;font-size:12px;color:{sc};text-align:center;">{sl}<br><span style="color:#475569;font-size:10px;">{pct}% done</span></div>
@@ -1098,24 +1085,9 @@ def main():
             if st.button("🔄 Refresh"):
                 st.cache_data.clear(); st.rerun()
 
-    # ── Sprint filter controls — visible above tabs ──
-    ctrl1, ctrl2, ctrl3, ctrl4 = st.columns([2, 2, 1, 1])
+    # ── Filter controls ──
+    ctrl1, ctrl2, ctrl3 = st.columns([3, 1, 1])
     with ctrl1:
-        # Sprint selector dropdown
-        sprint_labels = list(sprint_options.keys())
-        sel_idx = st.selectbox(
-            "🏃 Sprint",
-            options=sprint_labels,
-            index=0,
-            key="sprint_selector_main",
-            label_visibility="visible"
-        )
-        # Sync with sidebar selection
-        if sel_idx != selected_label:
-            selected_sprint_id   = sprint_options[sel_idx]
-            selected_sprint_name = sel_idx.split("  ·")[0].lstrip("🟢✅ ").strip()
-
-    with ctrl2:
         # Fix Version filter
         available_fix_versions = fetch_available_fix_versions()
         fv_options = {"📦 All Fix Versions": None}
@@ -1133,14 +1105,14 @@ def main():
         )
         selected_fix_version = fv_options[selected_fv_label]
 
-    with ctrl3:
+    with ctrl2:
         show_carried = st.toggle(
             "↩ Carried-over",
             value=True,
             help="Toggle to include or exclude tickets carried over from previous sprints"
         )
 
-    with ctrl4:
+    with ctrl3:
         carried_note = f"↩ {carried_ct}" if carried_ct > 0 else "✨ 0"
         color = "#fbbf24" if carried_ct > 0 else "#10b981"
         st.markdown(
@@ -1149,22 +1121,6 @@ def main():
         )
 
     st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-
-    # Show actual dates override notice if active
-    if actual_override:
-        st.markdown(f"""
-        <div style="background:rgba(251,191,36,0.06);border:1px solid rgba(251,191,36,0.25);
-             border-radius:8px;padding:8px 14px;margin-bottom:10px;display:flex;align-items:center;gap:10px;">
-            <span style="font-size:16px;">⚡</span>
-            <div style="font-size:11px;">
-                <span style="color:#fbbf24;font-weight:700;">Actual sprint dates applied</span>
-                <span style="color:#78716c;margin-left:8px;">
-                    Jira: {jira_start} → {jira_end} &nbsp;→&nbsp;
-                    Actual: <b style="color:#fbbf24;">{sel_start} → {sel_end} ({sel_days} days)</b>
-                </span>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
 
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
         f"📊 Overview",

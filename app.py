@@ -587,7 +587,7 @@ def render_overview(m, tickets=[]):
             f'border-radius:10px;padding:10px 16px;margin-top:8px;display:flex;align-items:center;gap:10px;">'
             f'<span style="font-size:20px;">↩</span>'
             f'<div><div style="color:#fbbf24;font-weight:700;font-size:13px;">{carried_ct} Carried-Over Tickets</div>'
-            f'<div style="color:#92400e;font-size:11px;">These tickets were started in a previous sprint — metrics include them</div></div>'
+            f'<div style="color:#92400e;font-size:11px;">Carried from earlier sprints — toggle ↩ above to exclude from metrics</div></div>'
             f'</div>',
             unsafe_allow_html=True
         )
@@ -857,7 +857,10 @@ def render_tickets(m, tickets=[]):
             row_cls = "ticket-row-wrap ticket-row-blocked" if status=="Blocked" else "ticket-row-wrap"
             rows += f'<div class="{row_cls}">'
             if t.get("carried_over"):
-                rows += '<span style="font-size:9px;background:rgba(251,191,36,0.15);border:1px solid rgba(251,191,36,0.4);color:#fbbf24;border-radius:4px;padding:1px 5px;margin-right:4px;white-space:nowrap;">↩ carried</span>'
+                prev_sprints = t.get('sprints', [])
+                src = prev_sprints[0] if prev_sprints else 'prev sprint'
+                all_sprints = ' → '.join(prev_sprints) if prev_sprints else 'prev sprint'
+                rows += f'<span style="font-size:9px;background:rgba(251,191,36,0.12);border:1px solid rgba(251,191,36,0.35);color:#fbbf24;border-radius:4px;padding:1px 6px;margin-right:4px;white-space:nowrap;cursor:help;" title="Sprint history: {all_sprints}">↩ {src}</span>'
                 rows += '<span style="font-size:9px;background:rgba(251,191,36,0.15);border:1px solid rgba(251,191,36,0.4);color:#fbbf24;border-radius:4px;padding:1px 5px;margin-right:4px;white-space:nowrap;">↩ carried</span>'
             rows += f'<span class="ticket-key" style="min-width:70px;flex-shrink:0;"><a href="{JIRA_BASE}/browse/{t["key"]}" target="_blank">{t["key"]}</a></span>'
             rows += f'<span style="font-size:9px;color:#7dd3fc;background:rgba(129,140,248,0.1);border-radius:3px;padding:2px 5px;min-width:44px;text-align:center;flex-shrink:0;">{t["type"][:7]}</span>'
@@ -911,10 +914,6 @@ def main():
         if selected_sprint_id:
             st.caption("📌 Tickets from previous sprints are tagged as carried over")
 
-        st.markdown("---")
-        show_carried = st.toggle("Show carried-over tickets", value=True)
-        if not show_carried:
-            st.caption("🚫 Carried-over tickets hidden from view")
         st.markdown("---")
         auto_slack = st.toggle("Auto-post blocked to Slack", value=False)
         st.markdown("---")
@@ -970,10 +969,6 @@ def main():
         st.info("Check JIRA_EMAIL and JIRA_API_TOKEN in Streamlit secrets.")
         return
     placeholder.empty()
-
-    # Filter carried-over tickets if toggle is off
-    if not show_carried:
-        tickets = [t for t in tickets if not t.get("carried_over", False)]
 
     # Build sprint dates from selected sprint (sprint_info already set in sidebar)
     if sprint_info and sprint_info.get("start"):
@@ -1032,6 +1027,40 @@ def main():
             if st.button("🔄 Refresh"):
                 st.cache_data.clear(); st.rerun()
 
+    # ── Sprint filter controls — visible above tabs ──
+    ctrl1, ctrl2, ctrl3 = st.columns([2, 1, 1])
+    with ctrl1:
+        # Sprint selector dropdown
+        sprint_labels = list(sprint_options.keys())
+        sel_idx = st.selectbox(
+            "🏃 Sprint",
+            options=sprint_labels,
+            index=0,
+            key="sprint_selector_main",
+            label_visibility="visible"
+        )
+        # Sync with sidebar selection
+        if sel_idx != selected_label:
+            selected_sprint_id   = sprint_options[sel_idx]
+            selected_sprint_name = sel_idx.split("  ·")[0].lstrip("🟢✅ ").strip()
+
+    with ctrl2:
+        show_carried = st.toggle(
+            "↩ Show carried-over",
+            value=True,
+            help="Toggle to include or exclude tickets carried over from previous sprints"
+        )
+
+    with ctrl3:
+        carried_note = f"↩ {carried_ct} carried over" if carried_ct > 0 else "✨ No carryover"
+        color = "#fbbf24" if carried_ct > 0 else "#10b981"
+        st.markdown(
+            f'<div style="margin-top:28px;font-size:11px;color:{color};font-weight:600;">{carried_note}</div>',
+            unsafe_allow_html=True
+        )
+
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
         f"📊 Overview",
         f"🔥 Burndown",
@@ -1039,6 +1068,11 @@ def main():
         f"💎 Story Points",
         f"🎫 All Tickets ({len(tickets)})",
     ])
+    # Apply carried-over filter AFTER toggle is available
+    if not show_carried:
+        tickets = [t for t in tickets if not t.get("carried_over", False)]
+        m = build_metrics(tickets, sprint_start=sel_start, sprint_days=sel_days)
+
     with tab1: render_overview(m, tickets)
     with tab2: render_burndown(m)
     with tab3: render_velocity(m)

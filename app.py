@@ -6,6 +6,7 @@ import re
 import os
 import time
 from datetime import datetime, date
+from scheduler import start_scheduler
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -398,19 +399,70 @@ def clean_title(s):
     return s.lstrip(',').strip()
 
 
+@st.cache_data(ttl=600, show_spinner=False)
+def fetch_available_sprints():
+    """Fetch all sprints (active + closed) from Jira"""
+    url  = f"{JIRA_BASE}/rest/agile/1.0/board"
+    auth = (JIRA_EMAIL, JIRA_TOKEN)
+    # Get board ID first
+    resp = requests.get(url, headers={"Accept": "application/json"},
+                        auth=auth, params={"projectKeyOrId": PROJECT}, timeout=15)
+    if not resp.ok:
+        return []
+    boards = resp.json().get("values", [])
+    if not boards:
+        return []
+    board_id = boards[0]["id"]
+
+    # Get all sprints for this board
+    sprints = []
+    start = 0
+    while True:
+        r = requests.get(
+            f"{JIRA_BASE}/rest/agile/1.0/board/{board_id}/sprint",
+            headers={"Accept": "application/json"}, auth=auth,
+            params={"startAt": start, "maxResults": 50, "state": "active,closed"},
+            timeout=15
+        )
+        if not r.ok:
+            break
+        data = r.json()
+        for s in data.get("values", []):
+            sprints.append({
+                "id":    s["id"],
+                "name":  s["name"],
+                "state": s["state"],
+                "start": s.get("startDate", "")[:10] if s.get("startDate") else "",
+                "end":   s.get("completeDate", s.get("endDate", ""))[:10] if s.get("completeDate") or s.get("endDate") else "",
+            })
+        if data.get("isLast", True):
+            break
+        start += 50
+
+    # Sort newest first
+    sprints.sort(key=lambda x: x["start"], reverse=True)
+    return sprints
+
+
 @st.cache_data(ttl=300, show_spinner=False)
-def fetch_jira_tickets():
+def fetch_jira_tickets(sprint_id=None):
     url = f"{JIRA_BASE}/rest/api/3/search/jql"
     auth = (JIRA_EMAIL, JIRA_TOKEN)
     headers = {"Accept": "application/json"}
     tickets = []
     next_page_token = None
 
+    # Build JQL — filter by specific sprint or open sprint
+    if sprint_id:
+        jql = f"project = {PROJECT} AND sprint = {sprint_id} ORDER BY created DESC"
+    else:
+        jql = f"project = {PROJECT} AND sprint in openSprints() ORDER BY created DESC"
+
     while True:
         params = {
-            "jql": f"project = {PROJECT} AND sprint in openSprints() ORDER BY created DESC",
+            "jql": jql,
             "maxResults": 100,
-            "fields": "summary,status,assignee,customfield_10024,issuetype",
+            "fields": "summary,status,assignee,customfield_10024,issuetype,customfield_10020",
         }
         if next_page_token:
             params["nextPageToken"] = next_page_token
@@ -422,13 +474,19 @@ def fetch_jira_tickets():
         for issue in data.get("issues", []):
             f = issue.get("fields", {})
             raw_sp = f.get("customfield_10024")
+            # Extract sprint names from customfield_10020
+            sprint_list = f.get("customfield_10020") or []
+            sprint_names = [s.get("name","") for s in sprint_list if isinstance(s, dict)]
+            carried_over = len(sprint_names) > 1  # ticket spans multiple sprints
             tickets.append({
-                "key":      issue["key"],
-                "summary":  clean_title(f.get("summary", "")),
-                "status":   f.get("status", {}).get("name", "Unknown"),
-                "assignee": (f.get("assignee") or {}).get("displayName", "Unassigned"),
-                "sp":       int(raw_sp) if raw_sp is not None else None,
-                "type":     f.get("issuetype", {}).get("name", ""),
+                "key":          issue["key"],
+                "summary":      clean_title(f.get("summary", "")),
+                "status":       f.get("status", {}).get("name", "Unknown"),
+                "assignee":     (f.get("assignee") or {}).get("displayName", "Unassigned"),
+                "sp":           int(raw_sp) if raw_sp is not None else None,
+                "type":         f.get("issuetype", {}).get("name", ""),
+                "sprints":      sprint_names,
+                "carried_over": carried_over,
             })
 
         if data.get("isLast", True):
@@ -441,7 +499,12 @@ def fetch_jira_tickets():
 
 
 # ─── METRICS ──────────────────────────────────────────────
-def build_metrics(tickets):
+def build_metrics(tickets, sprint_start=None, sprint_days=None):
+    """Build metrics — accepts dynamic sprint dates for correct burndown per sprint"""
+    # Use passed sprint dates or fall back to constants
+    s_start = sprint_start or SPRINT_START
+    s_days  = sprint_days  or SPRINT_DAYS
+
     total = len(tickets)
     done    = [t for t in tickets if t["status"] in DONE_STATUSES]
     blocked = [t for t in tickets if t["status"] in BLOCKED_STATUSES]
@@ -463,14 +526,15 @@ def build_metrics(tickets):
     done_sp    = sum(t["sp"] or 0 for t in done)
     blocked_sp = sum(t["sp"] or 0 for t in blocked)
     today = date.today()
-    current_day = max(1, min((today - SPRINT_START).days + 1, SPRINT_DAYS))
-    ideal = max(0, round(total - (total / SPRINT_DAYS) * (current_day - 1)))
+    current_day = max(1, min((today - s_start).days + 1, s_days))
+    ideal = max(0, round(total - (total / s_days) * (current_day - 1))) if s_days else total
     actual = total - len(done)
     gap = actual - ideal
     return dict(total=total, done=done, blocked=blocked, sc=sc, dev_map=dev_map,
                 total_sp=total_sp, done_sp=done_sp, blocked_sp=blocked_sp,
                 missing_sp=sum(1 for t in tickets if not t["sp"]),
                 current_day=current_day, ideal=ideal, actual=actual, gap=gap,
+                sprint_start=s_start, sprint_days=s_days,
                 status=("on-track" if gap<=0 else "slight-risk" if gap<=5 else "behind"),
                 tickets=tickets)
 
@@ -501,8 +565,9 @@ def post_to_slack(blocked, m):
 
 
 # ─── OVERVIEW TAB ─────────────────────────────────────────
-def render_overview(m):
+def render_overview(m, tickets=[]):
     total = m["total"]; done_ct = len(m["done"]); blocked_ct = len(m["blocked"])
+    carried_ct = sum(1 for t in tickets if t.get("carried_over", False))
 
     # KPI row using st.metric (native — always renders correctly)
     c = st.columns(7)
@@ -514,6 +579,18 @@ def render_overview(m):
     c[5].metric("✨ SP Done", m["done_sp"])
     pct = round(done_ct/total*100) if total else 0
     c[6].metric("📊 Sprint Done", f"{pct}%")
+
+    # Carried over indicator
+    if carried_ct > 0:
+        st.markdown(
+            f'<div style="background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.25);'
+            f'border-radius:10px;padding:10px 16px;margin-top:8px;display:flex;align-items:center;gap:10px;">'
+            f'<span style="font-size:20px;">↩</span>'
+            f'<div><div style="color:#fbbf24;font-weight:700;font-size:13px;">{carried_ct} Carried-Over Tickets</div>'
+            f'<div style="color:#92400e;font-size:11px;">These tickets were started in a previous sprint — metrics include them</div></div>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
 
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -637,12 +714,16 @@ def render_overview(m):
 
 # ─── BURNDOWN TAB ─────────────────────────────────────────
 def render_burndown(m):
-    total = m["total"]; cd = m["current_day"]
-    key_days = sorted(set([1,5,10,15,20,25,30,35,40,45,48,cd]))
+    total   = m["total"]; cd = m["current_day"]
+    s_start = m.get("sprint_start", SPRINT_START)
+    s_days  = m.get("sprint_days",  SPRINT_DAYS)
+    # Build key day markers dynamically based on sprint length
+    step = max(1, s_days // 8)
+    key_days = sorted(set([1] + list(range(step, s_days, step)) + [s_days, cd]))
     rows = []
     for d in key_days:
-        dt = SPRINT_START + pd.Timedelta(days=d-1)
-        ideal = max(0, round(total-(total/SPRINT_DAYS)*(d-1)))
+        dt = s_start + pd.Timedelta(days=d-1)
+        ideal = max(0, round(total-(total/s_days)*(d-1))) if s_days else 0
         actual = total if d==1 else (total-len(m["done"]) if d==cd else None)
         rows.append({"label": f"Today {dt.strftime('%d %b')}" if d==cd else dt.strftime('%d %b'), "ideal": ideal, "actual": actual})
     df = pd.DataFrame(rows)
@@ -751,7 +832,7 @@ def render_points(m):
 
 
 # ─── ALL TICKETS TAB ──────────────────────────────────────
-def render_tickets(m):
+def render_tickets(m, tickets=[]):
     tickets = m["tickets"]
     st.markdown(f"""
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;animation:fadeInUp 0.4s ease both;">
@@ -775,6 +856,9 @@ def render_tickets(m):
             bg = "rgba(248,113,113,0.04)" if status=="Blocked" else "rgba(255,255,255,0.015)"
             row_cls = "ticket-row-wrap ticket-row-blocked" if status=="Blocked" else "ticket-row-wrap"
             rows += f'<div class="{row_cls}">'
+            if t.get("carried_over"):
+                rows += '<span style="font-size:9px;background:rgba(251,191,36,0.15);border:1px solid rgba(251,191,36,0.4);color:#fbbf24;border-radius:4px;padding:1px 5px;margin-right:4px;white-space:nowrap;">↩ carried</span>'
+                rows += '<span style="font-size:9px;background:rgba(251,191,36,0.15);border:1px solid rgba(251,191,36,0.4);color:#fbbf24;border-radius:4px;padding:1px 5px;margin-right:4px;white-space:nowrap;">↩ carried</span>'
             rows += f'<span class="ticket-key" style="min-width:70px;flex-shrink:0;"><a href="{JIRA_BASE}/browse/{t["key"]}" target="_blank">{t["key"]}</a></span>'
             rows += f'<span style="font-size:9px;color:#7dd3fc;background:rgba(129,140,248,0.1);border-radius:3px;padding:2px 5px;min-width:44px;text-align:center;flex-shrink:0;">{t["type"][:7]}</span>'
             rows += f'<span class="ticket-summary" style="flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;"><a href="{JIRA_BASE}/browse/{t["key"]}" target="_blank">{t["summary"]}</a></span>'
@@ -785,6 +869,11 @@ def render_tickets(m):
 
 # ─── MAIN ─────────────────────────────────────────────────
 def main():
+    # Start background scheduler once per process
+    if "scheduler_started" not in st.session_state:
+        start_scheduler()
+        st.session_state.scheduler_started = True
+
     if not check_pin():
         return
 
@@ -793,9 +882,53 @@ def main():
         if st.button("🔄 Force Refresh", use_container_width=True):
             st.cache_data.clear(); st.rerun()
         st.markdown("---")
+
+        # Sprint selector
+        st.markdown("**🏃 Sprint Filter**")
+        available_sprints = fetch_available_sprints()
+
+        sprint_options = {"🟢 Current Sprint (Active)": None}
+        for s in available_sprints:
+            state_icon = "🟢" if s["state"] == "active" else "✅"
+            label = f"{state_icon} {s['name']}"
+            if s["end"]:
+                label += f"  ·  {s['end']}"
+            sprint_options[label] = s["id"]
+
+        selected_label = st.selectbox(
+            "Select sprint",
+            options=list(sprint_options.keys()),
+            index=0,
+            label_visibility="collapsed"
+        )
+        selected_sprint_id   = sprint_options[selected_label]
+        selected_sprint_name = selected_label.split("  ·")[0].lstrip("🟢✅ ").strip()
+
+        # Show carried-over warning
+        if selected_sprint_id:
+            st.caption("📌 Tickets from previous sprints are tagged as carried over")
+
+        st.markdown("---")
+        show_carried = st.toggle("Show carried-over tickets", value=True)
+        if not show_carried:
+            st.caption("🚫 Carried-over tickets hidden from view")
+        st.markdown("---")
         auto_slack = st.toggle("Auto-post blocked to Slack", value=False)
         st.markdown("---")
-        st.markdown(f"**Sprint:** {SPRINT_NAME}")
+        # Show selected sprint info
+        if sprint_info:
+            state_color = "#10b981" if sprint_info["state"] == "active" else "#64748b"
+            st.markdown(
+                f'<div style="background:rgba(0,212,255,0.05);border:1px solid rgba(0,212,255,0.15);'
+                f'border-radius:8px;padding:10px 12px;margin-bottom:8px;">'
+                f'<div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:1px;">Selected Sprint</div>'
+                f'<div style="color:#e2e8f0;font-weight:700;font-size:13px;margin-top:2px;">{selected_sprint_name}</div>'
+                f'<div style="font-size:10px;margin-top:4px;">'
+                f'<span style="color:{state_color};">● {sprint_info["state"].upper()}</span>'
+                f'<span style="color:#475569;margin-left:8px;">{sprint_info.get("start","?")} → {sprint_info.get("end","?")}</span>'
+                f'</div></div>',
+                unsafe_allow_html=True
+            )
         st.markdown(f"**Project:** {PROJECT}")
         st.markdown(f"**Jira:** [minehub.atlassian.net]({JIRA_BASE})")
 
@@ -835,7 +968,21 @@ def main():
         return
     placeholder.empty()
 
-    m = build_metrics(tickets)
+    # Filter carried-over tickets if toggle is off
+    if not show_carried:
+        tickets = [t for t in tickets if not t.get("carried_over", False)]
+
+    # Build sprint dates from selected sprint
+    sprint_info = next((s for s in available_sprints if s["id"] == selected_sprint_id), None)
+    if sprint_info and sprint_info.get("start"):
+        sel_start = date.fromisoformat(sprint_info["start"])
+        sel_end   = date.fromisoformat(sprint_info["end"]) if sprint_info.get("end") else date.today()
+        sel_days  = max(1, (sel_end - sel_start).days)
+    else:
+        sel_start = SPRINT_START
+        sel_days  = SPRINT_DAYS
+
+    m = build_metrics(tickets, sprint_start=sel_start, sprint_days=sel_days)
 
     if auto_slack and SLACK_WEBHOOK and m["blocked"]:
         ok, _ = post_to_slack(m["blocked"], m)
@@ -861,7 +1008,7 @@ def main():
     st.markdown(f"""<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
 <div><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;"><span class="live-dot"></span><span style="font-size:10px;color:#10b981;text-transform:uppercase;letter-spacing:2px;font-weight:600;">Live · Jira · 5 min cache</span></div>
 <h1 style="font-size:26px;font-weight:900;margin:0;background:linear-gradient(90deg,#00d4ff,#818cf8,#f472b6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:fadeInLeft 0.6s ease both;">Jules Sprint Dashboard<span class="cursor">|</span></h1>
-<div style="font-size:12px;color:#475569;margin-top:4px;">{SPRINT_NAME} · Feb 24 – Apr 12, 2026 · {fetched_at}</div></div>
+<div style="font-size:12px;color:#475569;margin-top:4px;">{selected_sprint_name} · {sel_start.strftime("%b %d")} – {(sel_start + pd.Timedelta(days=sel_days)).strftime("%b %d, %Y")} · {fetched_at}</div></div>
 <div style="display:flex;gap:10px;flex-wrap:wrap;">
 <div style="background:rgba(0,212,255,0.07);border:1px solid rgba(0,212,255,0.18);border-radius:10px;padding:10px 16px;font-size:12px;color:#7dd3fc;text-align:center;">📅 Day <strong>{m["current_day"]}</strong> / {SPRINT_DAYS}<br><span style="color:#475569;font-size:10px;">{days_left} days left</span></div>
 <div style="background:{sc}12;border:1px solid {sc}35;border-radius:10px;padding:10px 16px;font-size:12px;color:{sc};text-align:center;">{sl}<br><span style="color:#475569;font-size:10px;">{pct}% done</span></div>
@@ -890,15 +1037,15 @@ def main():
         f"💎 Story Points",
         f"🎫 All Tickets ({len(tickets)})",
     ])
-    with tab1: render_overview(m)
+    with tab1: render_overview(m, tickets)
     with tab2: render_burndown(m)
     with tab3: render_velocity(m)
     with tab4: render_points(m)
-    with tab5: render_tickets(m)
+    with tab5: render_tickets(m, tickets)
 
     st.markdown(
         f"<div style='text-align:center;font-size:9px;color:#334155;border-top:1px solid rgba(0,212,255,0.06);padding-top:14px;margin-top:24px;letter-spacing:1px;'>"
-        f"Jules Product &nbsp;·&nbsp; MineHub &nbsp;·&nbsp; {SPRINT_NAME} &nbsp;·&nbsp; {m['total']} tickets &nbsp;·&nbsp; {m['total_sp']} SP &nbsp;·&nbsp; {fetched_at}"
+        f"Jules Product &nbsp;·&nbsp; MineHub &nbsp;·&nbsp; {selected_sprint_name} &nbsp;·&nbsp; {m['total']} tickets &nbsp;·&nbsp; {m['total_sp']} SP &nbsp;·&nbsp; {fetched_at}"
         f"</div>",
         unsafe_allow_html=True
     )

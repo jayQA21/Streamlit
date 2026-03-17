@@ -30,6 +30,11 @@ SPRINT_NAME   = "Release Sprint 3"
 SPRINT_START  = date(2026, 2, 24)
 SPRINT_DAYS   = 48
 
+# SPRINT_ACTUAL_DATES is now computed dynamically in fetch_available_sprints()
+# Formula: Sprint N actual start = Sprint N-1 completeDate
+# This means when JP closes Sprint 3 on Mar 16 → Sprint 4 actual start = Mar 16 automatically
+SPRINT_ACTUAL_DATES = {}  # populated dynamically below
+
 DONE_STATUSES    = {"Done", "PO/QA VALID", "In demo", "In production", "CS reviewed", "Demo", "In Production", "CS Reviewed"}
 BLOCKED_STATUSES = {"Blocked"}
 ACTIVE_STATUSES  = {"In Progress", "AIM OF THE DAY", "Tech review", "PO review",
@@ -441,7 +446,49 @@ def fetch_available_sprints():
 
     # Sort newest first
     sprints.sort(key=lambda x: x["start"], reverse=True)
+
+    # ── Dynamically compute actual start dates ──
+    # Formula: Sprint N actual start = previous sprint's completeDate
+    # Sort chronologically to find previous sprint
+    chrono = sorted(sprints, key=lambda x: x["start"])
+    actual_dates = {}
+    for idx, sp in enumerate(chrono):
+        if idx == 0:
+            # First sprint — no previous sprint, use Jira start
+            continue
+        prev = chrono[idx - 1]
+        if prev.get("end"):
+            # Use previous sprint's end/complete date as actual start
+            actual_start = date.fromisoformat(prev["end"])
+            sp_end_str = sp.get("end", "")
+            actual_end  = date.fromisoformat(sp_end_str) if sp_end_str else date.today()
+            actual_dates[sp["name"]] = (actual_start, actual_end)
+
+    # Store globally so build_metrics can use it
+    import builtins
+    builtins.SPRINT_ACTUAL_DATES_DYNAMIC = actual_dates
     return sprints
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def fetch_available_fix_versions():
+    """Fetch all fix versions for the JENG project"""
+    url  = f"{JIRA_BASE}/rest/api/3/project/{PROJECT}/versions"
+    auth = (JIRA_EMAIL, JIRA_TOKEN)
+    resp = requests.get(url, headers={"Accept": "application/json"}, auth=auth, timeout=15)
+    if not resp.ok:
+        return []
+    versions = []
+    for v in resp.json():
+        if not v.get("archived", False):
+            versions.append({
+                "id":       v["id"],
+                "name":     v["name"],
+                "released": v.get("released", False),
+            })
+    # Sort — unreleased first (current), then released
+    versions.sort(key=lambda x: (x["released"], x["name"]))
+    return versions
 
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -462,7 +509,7 @@ def fetch_jira_tickets(sprint_id=None):
         params = {
             "jql": jql,
             "maxResults": 100,
-            "fields": "summary,status,assignee,customfield_10024,issuetype,customfield_10020",
+            "fields": "summary,status,assignee,customfield_10024,issuetype,customfield_10020,fixVersions",
         }
         if next_page_token:
             params["nextPageToken"] = next_page_token
@@ -478,6 +525,7 @@ def fetch_jira_tickets(sprint_id=None):
             sprint_list = f.get("customfield_10020") or []
             sprint_names = [s.get("name","") for s in sprint_list if isinstance(s, dict)]
             carried_over = len(sprint_names) > 1  # ticket spans multiple sprints
+            fix_versions = [v.get("name","") for v in (f.get("fixVersions") or []) if isinstance(v, dict)]
             tickets.append({
                 "key":          issue["key"],
                 "summary":      clean_title(f.get("summary", "")),
@@ -487,6 +535,7 @@ def fetch_jira_tickets(sprint_id=None):
                 "type":         f.get("issuetype", {}).get("name", ""),
                 "sprints":      sprint_names,
                 "carried_over": carried_over,
+                "fix_versions": fix_versions,
             })
 
         if data.get("isLast", True):
@@ -866,6 +915,9 @@ def render_tickets(m, tickets=[]):
             rows += f'<span style="font-size:9px;color:#7dd3fc;background:rgba(129,140,248,0.1);border-radius:3px;padding:2px 5px;min-width:44px;text-align:center;flex-shrink:0;">{t["type"][:7]}</span>'
             rows += f'<span class="ticket-summary" style="flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;"><a href="{JIRA_BASE}/browse/{t["key"]}" target="_blank">{t["summary"]}</a></span>'
             rows += f'<span style="font-size:9px;color:{color};font-weight:700;background:{color}20;padding:2px 7px;border-radius:3px;white-space:nowrap;flex-shrink:0;">{initials} {fname}</span>'
+            # Fix version badge
+            for fv in t.get("fix_versions", []):
+                rows += f'<span style="font-size:8px;background:rgba(99,102,241,0.12);border:1px solid rgba(99,102,241,0.3);color:#818cf8;border-radius:3px;padding:1px 5px;white-space:nowrap;flex-shrink:0;">📦 {fv[:12]}</span>'
             rows += sp_badge + "</div>"
         st.markdown(f'<div style="margin-bottom:14px;"><div style="font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:5px;color:{sc};">{status} ({len(group)})</div>{rows}</div>', unsafe_allow_html=True)
 
@@ -920,6 +972,10 @@ def main():
         # Show selected sprint info
         if sprint_info:
             state_color = "#10b981" if sprint_info["state"] == "active" else "#64748b"
+            import builtins
+            _dyn    = getattr(builtins, "SPRINT_ACTUAL_DATES_DYNAMIC", {})
+            _actual = _dyn.get(sprint_info.get("name","")) or SPRINT_ACTUAL_DATES.get(sprint_info.get("name",""))
+            _act_str = f'<div style="font-size:9px;color:#fbbf24;margin-top:3px;">⚡ Actual: {_actual[0]} → {_actual[1]} ({(_actual[1]-_actual[0]).days} days)</div>' if _actual else ""
             st.markdown(
                 f'<div style="background:rgba(0,212,255,0.05);border:1px solid rgba(0,212,255,0.15);'
                 f'border-radius:8px;padding:10px 12px;margin-bottom:8px;">'
@@ -927,8 +983,8 @@ def main():
                 f'<div style="color:#e2e8f0;font-weight:700;font-size:13px;margin-top:2px;">{selected_sprint_name}</div>'
                 f'<div style="font-size:10px;margin-top:4px;">'
                 f'<span style="color:{state_color};">● {sprint_info["state"].upper()}</span>'
-                f'<span style="color:#475569;margin-left:8px;">{sprint_info.get("start","?")} → {sprint_info.get("end","?")}</span>'
-                f'</div></div>',
+                f'<span style="color:#475569;margin-left:8px;">Jira: {sprint_info.get("start","?")} → {sprint_info.get("end","?")}</span>'
+                f'</div>{_act_str}</div>',
                 unsafe_allow_html=True
             )
         st.markdown(f"**Project:** {PROJECT}")
@@ -970,14 +1026,27 @@ def main():
         return
     placeholder.empty()
 
-    # Build sprint dates from selected sprint (sprint_info already set in sidebar)
+    # Build sprint dates — use actual override if available, else Jira dates
     if sprint_info and sprint_info.get("start"):
-        sel_start = date.fromisoformat(sprint_info["start"])
-        sel_end   = date.fromisoformat(sprint_info["end"]) if sprint_info.get("end") else date.today()
-        sel_days  = max(1, (sel_end - sel_start).days)
+        jira_start = date.fromisoformat(sprint_info["start"])
+        jira_end   = date.fromisoformat(sprint_info["end"]) if sprint_info.get("end") else date.today()
+        # Check for actual date override — use dynamic dict first, fallback to static
+        import builtins
+        _dynamic = getattr(builtins, "SPRINT_ACTUAL_DATES_DYNAMIC", {})
+        actual = _dynamic.get(sprint_info.get("name", "")) or SPRINT_ACTUAL_DATES.get(sprint_info.get("name", ""))
+        if actual:
+            sel_start, sel_end = actual
+            sel_days = max(1, (sel_end - sel_start).days)
+            actual_override = True
+        else:
+            sel_start = jira_start
+            sel_end   = jira_end
+            sel_days  = max(1, (sel_end - sel_start).days)
+            actual_override = False
     else:
-        sel_start = SPRINT_START
-        sel_days  = SPRINT_DAYS
+        sel_start       = SPRINT_START
+        sel_days        = SPRINT_DAYS
+        actual_override = False
 
     m = build_metrics(tickets, sprint_start=sel_start, sprint_days=sel_days)
     # Pre-calculate carried_ct here so it's available in controls row
@@ -1030,7 +1099,7 @@ def main():
                 st.cache_data.clear(); st.rerun()
 
     # ── Sprint filter controls — visible above tabs ──
-    ctrl1, ctrl2, ctrl3 = st.columns([2, 1, 1])
+    ctrl1, ctrl2, ctrl3, ctrl4 = st.columns([2, 2, 1, 1])
     with ctrl1:
         # Sprint selector dropdown
         sprint_labels = list(sprint_options.keys())
@@ -1047,21 +1116,55 @@ def main():
             selected_sprint_name = sel_idx.split("  ·")[0].lstrip("🟢✅ ").strip()
 
     with ctrl2:
+        # Fix Version filter
+        available_fix_versions = fetch_available_fix_versions()
+        fv_options = {"📦 All Fix Versions": None}
+        for fv in available_fix_versions:
+            icon = "✅" if fv["released"] else "🚀"
+            fv_options[f"{icon} {fv['name']}"] = fv["name"]
+
+        selected_fv_label = st.selectbox(
+            "📦 Fix Version",
+            options=list(fv_options.keys()),
+            index=0,
+            key="fix_version_selector",
+            label_visibility="visible",
+            help="Filter tickets by fix version (release). Velocity recalculates for selected version only."
+        )
+        selected_fix_version = fv_options[selected_fv_label]
+
+    with ctrl3:
         show_carried = st.toggle(
-            "↩ Show carried-over",
+            "↩ Carried-over",
             value=True,
             help="Toggle to include or exclude tickets carried over from previous sprints"
         )
 
-    with ctrl3:
-        carried_note = f"↩ {carried_ct} carried over" if carried_ct > 0 else "✨ No carryover"
+    with ctrl4:
+        carried_note = f"↩ {carried_ct}" if carried_ct > 0 else "✨ 0"
         color = "#fbbf24" if carried_ct > 0 else "#10b981"
         st.markdown(
-            f'<div style="margin-top:28px;font-size:11px;color:{color};font-weight:600;">{carried_note}</div>',
+            f'<div style="margin-top:28px;font-size:11px;color:{color};font-weight:600;">{carried_note} carried</div>',
             unsafe_allow_html=True
         )
 
     st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
+    # Show actual dates override notice if active
+    if actual_override:
+        st.markdown(f"""
+        <div style="background:rgba(251,191,36,0.06);border:1px solid rgba(251,191,36,0.25);
+             border-radius:8px;padding:8px 14px;margin-bottom:10px;display:flex;align-items:center;gap:10px;">
+            <span style="font-size:16px;">⚡</span>
+            <div style="font-size:11px;">
+                <span style="color:#fbbf24;font-weight:700;">Actual sprint dates applied</span>
+                <span style="color:#78716c;margin-left:8px;">
+                    Jira: {jira_start} → {jira_end} &nbsp;→&nbsp;
+                    Actual: <b style="color:#fbbf24;">{sel_start} → {sel_end} ({sel_days} days)</b>
+                </span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
         f"📊 Overview",
@@ -1070,9 +1173,16 @@ def main():
         f"💎 Story Points",
         f"🎫 All Tickets ({len(tickets)})",
     ])
-    # Apply carried-over filter AFTER toggle is available
+    # Apply fix version filter first
+    if selected_fix_version:
+        tickets = [t for t in tickets if selected_fix_version in t.get("fix_versions", [])]
+
+    # Apply carried-over filter
     if not show_carried:
         tickets = [t for t in tickets if not t.get("carried_over", False)]
+
+    # Recalculate metrics after any filtering
+    if selected_fix_version or not show_carried:
         m = build_metrics(tickets, sprint_start=sel_start, sprint_days=sel_days)
     # Pre-calculate carried_ct here so it's available in controls row
     carried_ct = sum(1 for t in tickets if t.get("carried_over", False))

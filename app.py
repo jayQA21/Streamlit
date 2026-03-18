@@ -6,7 +6,6 @@ import re
 import os
 import time
 from datetime import datetime, date
-from scheduler import start_scheduler
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -843,12 +842,6 @@ def render_velocity(m):
         margin=dict(l=0,r=0,t=10,b=40))
     st.plotly_chart(fig, use_container_width=True)
 
-    if not devs:
-        st.info("No tickets match the selected filters.", icon="🔍")
-        return
-    if not devs:
-        st.info("No tickets match the selected filters.", icon="🔍")
-        return
     cols = st.columns(len(devs))
     for i, (name, d) in enumerate(devs):
         color = DEV_COLORS.get(name,"#64748b")
@@ -949,11 +942,6 @@ def render_tickets(m, tickets=[]):
 
 # ─── MAIN ─────────────────────────────────────────────────
 def main():
-    # Start background scheduler once per process
-    if "scheduler_started" not in st.session_state:
-        start_scheduler()
-        st.session_state.scheduler_started = True
-
     if not check_pin():
         return
 

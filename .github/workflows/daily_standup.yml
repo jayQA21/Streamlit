@@ -2,7 +2,7 @@ name: Jules Daily Standup
 
 on:
   schedule:
-    - cron: '0 9 * * 1-5'  # 9:00 AM UTC Mon–Fri
+    - cron: '30 3 * * 1-5'  # 3:30 AM UTC = 9:00 AM IST, Mon-Fri
   workflow_dispatch:         # manual trigger button on GitHub
 
 jobs:

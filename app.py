@@ -25,9 +25,10 @@ SLACK_WEBHOOK = get_secret("SLACK_WEBHOOK_URL")
 DASHBOARD_PIN = get_secret("DASHBOARD_PIN")
 
 PROJECT       = "JENG"
-SPRINT_NAME   = "Release Sprint 3"
-SPRINT_START  = date(2026, 2, 24)
-SPRINT_DAYS   = 48
+# Fallbacks only — all sprint data fetched live from Jira
+SPRINT_NAME   = "Active Sprint"
+SPRINT_START  = date(2026, 3, 9)
+SPRINT_DAYS   = 12
 
 # SPRINT_ACTUAL_DATES is now computed dynamically in fetch_available_sprints()
 # Formula: Sprint N actual start = Sprint N-1 completeDate
@@ -596,12 +597,12 @@ def post_to_slack(blocked, m):
     label = {"on-track":"On Track","slight-risk":"Slight Risk","behind":"Behind"}[m["status"]]
     lines = [f"• `{t['key']}` — {t['summary'][:55]}{'...' if len(t['summary'])>55 else ''} _({t['assignee'].split()[0]})_" for t in blocked]
     payload = {"blocks":[
-        {"type":"header","text":{"type":"plain_text","text":f"🚀 Jules Sprint Update — Day {m['current_day']}/{SPRINT_DAYS}"}},
+        {"type":"header","text":{"type":"plain_text","text":f"🚀 Jules Sprint Update — Day {m['current_day']}/{m['sprint_days']}"}},
         {"type":"section","fields":[
             {"type":"mrkdwn","text":f"*Sprint Health*\n{emoji} {label}"},
             {"type":"mrkdwn","text":f"*Progress*\n✅ {len(m['done'])}/{m['total']} ({pct}%)"},
             {"type":"mrkdwn","text":f"*Story Points*\n💎 {m['done_sp']}/{m['total_sp']} SP"},
-            {"type":"mrkdwn","text":f"*Days Left*\n📅 {SPRINT_DAYS-m['current_day']} days"},
+            {"type":"mrkdwn","text":f"*Days Left*\n📅 {m['sprint_days']-m['current_day']} days"},
         ]},
         {"type":"divider"},
     ]}
@@ -790,12 +791,12 @@ def render_burndown(m):
 
     gap = m["gap"]
     gap_color = "#10b981" if gap<=0 else "#fbbf24" if gap<=5 else "#f87171"
-    st.markdown(f"**🔥 Sprint Burndown** — Day {cd}/{SPRINT_DAYS} · {SPRINT_DAYS-cd} days left")
+    st.markdown(f"**🔥 Sprint Burndown** — Day {cd}/{s_days} · {s_days-cd} days left")
 
     c = st.columns(5)
     for col, (lbl, val, clr) in zip(c, [
-        ("Sprint Day", f"{cd}/{SPRINT_DAYS}", "#00d4ff"),
-        ("Days Left", SPRINT_DAYS-cd, "#818cf8"),
+        ("Sprint Day", f"{cd}/{s_days}", "#00d4ff"),
+        ("Days Left", s_days-cd, "#818cf8"),
         ("Ideal", m["ideal"], "#f87171"),
         ("Actual", m["actual"], "#00d4ff"),
         ("Gap", "On Track 🎯" if gap<=0 else f"+{gap} Behind", gap_color),
@@ -818,8 +819,8 @@ def render_burndown(m):
         yaxis=dict(gridcolor="#1e2d47",tickfont=dict(size=10),range=[0,total+3]),
         margin=dict(l=0,r=0,t=10,b=40), hovermode="x unified")
     st.plotly_chart(fig, use_container_width=True)
-    elapsed = round(((cd-1)/(SPRINT_DAYS-1))*100)
-    st.progress(elapsed/100, text=f"Sprint {elapsed}% elapsed · {SPRINT_DAYS-cd} days remaining")
+    elapsed = round(((cd-1)/max(1,(s_days-1)))*100)
+    st.progress(elapsed/100, text=f"Sprint {elapsed}% elapsed · {s_days-cd} days remaining")
 
 
 # ─── VELOCITY TAB ─────────────────────────────────────────
@@ -1001,8 +1002,11 @@ def main():
         </div>
     </div>""", unsafe_allow_html=True)
 
+    # Use sprint filter if set
+    sprint_filter_id = st.session_state.get("selected_sprint_filter", None)
+
     try:
-        tickets = fetch_jira_tickets()
+        tickets = fetch_jira_tickets(sprint_id=sprint_filter_id)
         fetched_at = datetime.now().strftime("%d %b %Y, %H:%M")
     except Exception as e:
         placeholder.empty()
@@ -1011,10 +1015,14 @@ def main():
         return
     placeholder.empty()
 
-    # Sprint dates — always from active sprint (matches Jira board view)
-    if sprint_info and sprint_info.get("start"):
-        sel_start = date.fromisoformat(sprint_info["start"])
-        sel_end   = date.fromisoformat(sprint_info["end"]) if sprint_info.get("end") else date.today()
+    # Sprint dates — use filtered sprint if selected, else active sprint
+    filtered_sprint_info = next((s for s in available_sprints if s["id"] == sprint_filter_id), None) if sprint_filter_id else sprint_info
+    display_sprint_info  = filtered_sprint_info or sprint_info
+    display_sprint_name  = display_sprint_info["name"] if display_sprint_info else selected_sprint_name
+
+    if display_sprint_info and display_sprint_info.get("start"):
+        sel_start = date.fromisoformat(display_sprint_info["start"])
+        sel_end   = date.fromisoformat(display_sprint_info["end"]) if display_sprint_info.get("end") else date.today()
         sel_days  = max(1, (sel_end - sel_start).days)
     else:
         sel_start = SPRINT_START
@@ -1040,7 +1048,7 @@ def main():
     """, unsafe_allow_html=True)
 
     # Header
-    days_left = SPRINT_DAYS - m["current_day"]
+    days_left = sel_days - m["current_day"]
     pct = round(len(m["done"])/m["total"]*100) if m["total"] else 0
     sc = "#10b981" if m["status"]=="on-track" else "#fbbf24" if m["status"]=="slight-risk" else "#f87171"
     sl = "On Track 🎯" if m["status"]=="on-track" else "Slight Risk ⚠️" if m["status"]=="slight-risk" else "Behind 🚨"
@@ -1048,12 +1056,12 @@ def main():
 <div><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;"><span class="live-dot"></span><span style="font-size:10px;color:#10b981;text-transform:uppercase;letter-spacing:2px;font-weight:600;">Live · Jira · 5 min cache</span></div>
 <h1 style="font-size:26px;font-weight:900;margin:0;background:linear-gradient(90deg,#00d4ff,#818cf8,#f472b6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:fadeInLeft 0.6s ease both;">Jules Sprint Dashboard<span class="cursor">|</span></h1>
 <div style="display:flex;align-items:center;gap:10px;margin-top:6px;flex-wrap:wrap;">
-  <span style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.35);border-radius:6px;padding:3px 10px;font-size:11px;font-weight:700;color:#10b981;">🟢 {selected_sprint_name}</span>
+  <span style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.35);border-radius:6px;padding:3px 10px;font-size:11px;font-weight:700;color:#10b981;">🟢 {display_sprint_name}</span>
   <span style="font-size:12px;color:#475569;">{sel_start.strftime("%b %d")} – {(sel_start + pd.Timedelta(days=sel_days)).strftime("%b %d, %Y")}</span>
   <span style="font-size:11px;color:#334155;">· {fetched_at}</span>
 </div></div>
 <div style="display:flex;gap:10px;flex-wrap:wrap;">
-<div style="background:rgba(0,212,255,0.07);border:1px solid rgba(0,212,255,0.18);border-radius:10px;padding:10px 16px;font-size:12px;color:#7dd3fc;text-align:center;">📅 Day <strong>{m["current_day"]}</strong> / {SPRINT_DAYS}<br><span style="color:#475569;font-size:10px;">{days_left} days left</span></div>
+<div style="background:rgba(0,212,255,0.07);border:1px solid rgba(0,212,255,0.18);border-radius:10px;padding:10px 16px;font-size:12px;color:#7dd3fc;text-align:center;">📅 Day <strong>{m["current_day"]}</strong> / {sel_days}<br><span style="color:#475569;font-size:10px;">{days_left} days left</span></div>
 <div style="background:{sc}12;border:1px solid {sc}35;border-radius:10px;padding:10px 16px;font-size:12px;color:{sc};text-align:center;">{sl}<br><span style="color:#475569;font-size:10px;">{pct}% done</span></div>
 </div></div>""", unsafe_allow_html=True)
 
@@ -1074,8 +1082,44 @@ def main():
                 st.cache_data.clear(); st.rerun()
 
     # ── Filter controls ──
-    ctrl1, ctrl2, ctrl3 = st.columns([3, 1, 1])
+    # Sprint filter state
+    if "selected_sprint_filter" not in st.session_state:
+        st.session_state.selected_sprint_filter = None  # None = active sprint
+
+    ctrl1, ctrl2, ctrl3, ctrl4 = st.columns([2, 2, 1, 1])
+
     with ctrl1:
+        # Sprint filter — active + closed sprints
+        all_sprints = fetch_available_sprints()
+        sprint_filter_options = {"🟢 Current Sprint (Active)": None}
+        for s in all_sprints:
+            icon = "🟢" if s["state"] == "active" else "✅"
+            label = f"{icon} {s['name']}"
+            if s.get("end"):
+                label += f" · {s['end']}"
+            sprint_filter_options[label] = s["id"]
+
+        # Find current index
+        current_ids = list(sprint_filter_options.values())
+        current_idx = 0
+        if st.session_state.selected_sprint_filter in current_ids:
+            current_idx = current_ids.index(st.session_state.selected_sprint_filter)
+
+        selected_sprint_label = st.selectbox(
+            "🏃 Sprint",
+            options=list(sprint_filter_options.keys()),
+            index=current_idx,
+            key="sprint_filter_selector",
+            label_visibility="visible",
+            help="Filter by sprint. Includes closed sprints for historical view."
+        )
+        new_sprint_id = sprint_filter_options[selected_sprint_label]
+        if new_sprint_id != st.session_state.selected_sprint_filter:
+            st.session_state.selected_sprint_filter = new_sprint_id
+            st.cache_data.clear()
+            st.rerun()
+
+    with ctrl2:
         # Fix Version filter
         available_fix_versions = fetch_available_fix_versions()
         fv_options = {"📦 All Fix Versions": None}
@@ -1089,26 +1133,61 @@ def main():
             index=0,
             key="fix_version_selector",
             label_visibility="visible",
-            help="Filter tickets by fix version (release). Velocity recalculates for selected version only."
+            help="Filter tickets by fix version. Velocity recalculates for selected version only."
         )
         selected_fix_version = fv_options[selected_fv_label]
 
-    with ctrl2:
+    with ctrl3:
         show_carried = st.toggle(
             "↩ Carried-over",
             value=True,
             help="Toggle to include or exclude tickets carried over from previous sprints"
         )
 
-    with ctrl3:
-        carried_note = f"↩ {carried_ct}" if carried_ct > 0 else "✨ 0"
-        color = "#fbbf24" if carried_ct > 0 else "#10b981"
-        st.markdown(
-            f'<div style="margin-top:28px;font-size:11px;color:{color};font-weight:600;">{carried_note} carried</div>',
-            unsafe_allow_html=True
-        )
+    with ctrl4:
+        # Active filter badges + clear button
+        active_filters = []
+        if st.session_state.selected_sprint_filter is not None:
+            active_filters.append("sprint")
+        if selected_fix_version:
+            active_filters.append("version")
+
+        st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
+        if active_filters:
+            filter_label = " + ".join(active_filters)
+            if st.button(f"✕ Clear ({filter_label})", use_container_width=True, help="Remove all active filters"):
+                st.session_state.selected_sprint_filter = None
+                st.cache_data.clear()
+                st.rerun()
+        else:
+            carried_note = f"↩ {carried_ct}" if carried_ct > 0 else "✨ 0"
+            color = "#fbbf24" if carried_ct > 0 else "#10b981"
+            st.markdown(
+                f'<div style="margin-top:24px;font-size:11px;color:{color};font-weight:600;">{carried_note} carried</div>',
+                unsafe_allow_html=True
+            )
 
     st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
+    # Active filter banner
+    banner_parts = []
+    if sprint_filter_id and display_sprint_info:
+        state_icon = "🟢" if display_sprint_info["state"] == "active" else "✅"
+        banner_parts.append(f"{state_icon} <b style='color:#00d4ff;'>{display_sprint_info['name']}</b>")
+    if selected_fix_version:
+        banner_parts.append(f"📦 <b style='color:#818cf8;'>{selected_fix_version}</b>")
+    if not show_carried:
+        banner_parts.append("↩ <b style='color:#fbbf24;'>Carried-over hidden</b>")
+    if banner_parts:
+        st.markdown(
+            '<div style="background:rgba(0,212,255,0.05);border:1px solid rgba(0,212,255,0.2);'
+            'border-radius:8px;padding:7px 14px;margin-bottom:8px;font-size:11px;display:flex;align-items:center;gap:8px;">'
+            '<span style="color:#475569;">🔍 Filters:</span> '
+            + ' &nbsp;·&nbsp; '.join(banner_parts)
+            + f' &nbsp;·&nbsp; <span style="color:#475569;">{len(tickets)} tickets</span>'
+            + '</div>',
+            unsafe_allow_html=True
+        )
 
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
         f"📊 Overview",
@@ -1139,7 +1218,7 @@ def main():
 
     st.markdown(
         f"<div style='text-align:center;font-size:9px;color:#334155;border-top:1px solid rgba(0,212,255,0.06);padding-top:14px;margin-top:24px;letter-spacing:1px;'>"
-        f"Jules Product &nbsp;·&nbsp; MineHub &nbsp;·&nbsp; {selected_sprint_name} &nbsp;·&nbsp; {m['total']} tickets &nbsp;·&nbsp; {m['total_sp']} SP &nbsp;·&nbsp; {fetched_at}"
+        f"Jules Product &nbsp;·&nbsp; MineHub &nbsp;·&nbsp; {display_sprint_name} &nbsp;·&nbsp; {m['total']} tickets &nbsp;·&nbsp; {m['total_sp']} SP &nbsp;·&nbsp; {fetched_at}"
         f"</div>",
         unsafe_allow_html=True
     )

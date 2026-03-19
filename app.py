@@ -509,7 +509,7 @@ def fetch_jira_tickets(sprint_id=None):
         params = {
             "jql": jql,
             "maxResults": 100,
-            "fields": "summary,status,assignee,customfield_10024,issuetype,customfield_10020,fixVersions",
+            "fields": "summary,status,assignee,customfield_10024,issuetype,customfield_10020,fixVersions,resolutiondate",
         }
         if next_page_token:
             params["nextPageToken"] = next_page_token
@@ -526,16 +526,19 @@ def fetch_jira_tickets(sprint_id=None):
             sprint_names = [s.get("name","") for s in sprint_list if isinstance(s, dict)]
             carried_over = len(sprint_names) > 1  # ticket spans multiple sprints
             fix_versions = [v.get("name","") for v in (f.get("fixVersions") or []) if isinstance(v, dict)]
+            raw_rd = f.get("resolutiondate")
+            resolved_date = raw_rd[:10] if raw_rd else None  # "YYYY-MM-DD"
             tickets.append({
-                "key":          issue["key"],
-                "summary":      clean_title(f.get("summary", "")),
-                "status":       f.get("status", {}).get("name", "Unknown"),
-                "assignee":     (f.get("assignee") or {}).get("displayName", "Unassigned"),
-                "sp":           int(raw_sp) if raw_sp is not None else None,
-                "type":         f.get("issuetype", {}).get("name", ""),
-                "sprints":      sprint_names,
-                "carried_over": carried_over,
-                "fix_versions": fix_versions,
+                "key":           issue["key"],
+                "summary":       clean_title(f.get("summary", "")),
+                "status":        f.get("status", {}).get("name", "Unknown"),
+                "assignee":      (f.get("assignee") or {}).get("displayName", "Unassigned"),
+                "sp":            int(raw_sp) if raw_sp is not None else None,
+                "type":          f.get("issuetype", {}).get("name", ""),
+                "sprints":       sprint_names,
+                "carried_over":  carried_over,
+                "fix_versions":  fix_versions,
+                "resolved_date": resolved_date,
             })
 
         if data.get("isLast", True):
@@ -579,11 +582,18 @@ def build_metrics(tickets, sprint_start=None, sprint_days=None):
     ideal = max(0, round(total - (total / s_days) * (current_day - 1))) if s_days else total
     actual = total - len(done)
     gap = actual - ideal
+    # ── True velocity: tickets resolved ON OR AFTER sprint start date ──
+    # Uses resolutiondate from Jira — fully dynamic, no hardcoding
+    true_done    = [t for t in done if t.get("resolved_date") and t["resolved_date"] >= str(s_start)]
+    pre_done     = [t for t in done if not t.get("resolved_date") or t["resolved_date"] < str(s_start)]
+    true_done_sp = sum(t["sp"] or 0 for t in true_done)
+
     return dict(total=total, done=done, blocked=blocked, sc=sc, dev_map=dev_map,
                 total_sp=total_sp, done_sp=done_sp, blocked_sp=blocked_sp,
                 missing_sp=sum(1 for t in tickets if not t["sp"]),
                 current_day=current_day, ideal=ideal, actual=actual, gap=gap,
                 sprint_start=s_start, sprint_days=s_days,
+                true_done=true_done, pre_done=pre_done, true_done_sp=true_done_sp,
                 status=("on-track" if gap<=0 else "slight-risk" if gap<=5 else "behind"),
                 tickets=tickets)
 
@@ -628,15 +638,47 @@ def render_overview(m, tickets=[]):
     carried_ct = sum(1 for t in tickets if t.get("carried_over", False))
 
     # KPI row using st.metric (native — always renders correctly)
-    c = st.columns(7)
+    c = st.columns(8)
     c[0].metric("🎯 Total", total)
-    c[1].metric("✅ Done", done_ct, help="Jules definition")
-    c[2].metric("⏳ Remaining", total - done_ct)
-    c[3].metric("🚫 Blocked", blocked_ct)
-    c[4].metric("💎 Total SP", m["total_sp"])
-    c[5].metric("✨ SP Done", m["done_sp"])
+    c[1].metric("✅ Done", done_ct, help="All done tickets including carried-over")
+    c[2].metric("⚡ True Velocity",
+                len(m.get("true_done", [])),
+                help=f"Tickets resolved ON or AFTER sprint start ({m['sprint_start']}) — pure sprint work")
+    c[3].metric("⏳ Remaining", total - done_ct)
+    c[4].metric("🚫 Blocked", blocked_ct)
+    c[5].metric("💎 Total SP", m["total_sp"])
+    c[6].metric("✨ SP Done", m["done_sp"])
     pct = round(done_ct/total*100) if total else 0
-    c[6].metric("📊 Sprint Done", f"{pct}%")
+    c[7].metric("📊 Sprint Done", f"{pct}%")
+
+    # ── True Velocity banner ──
+    true_ct  = len(m.get("true_done", []))
+    pre_ct   = len(m.get("pre_done", []))
+    sprint_start_str = str(m.get("sprint_start", ""))
+    st.markdown(
+        f'<div style="background:rgba(0,212,255,0.05);border:1px solid rgba(0,212,255,0.2);'
+        f'border-radius:10px;padding:10px 16px;margin-top:8px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">'
+        f'<span style="font-size:18px;">⚡</span>'
+        f'<div>'
+        f'<div style="color:#00d4ff;font-weight:700;font-size:13px;">True Sprint Velocity</div>'
+        f'<div style="font-size:11px;color:#475569;">Based on <code>resolutiondate</code> from Jira · Sprint start: <b>{sprint_start_str}</b></div>'
+        f'</div>'
+        f'<div style="display:flex;gap:20px;margin-left:auto;flex-wrap:wrap;">'
+        f'<div style="text-align:center;">'
+        f'<div style="font-size:20px;font-weight:900;color:#10b981;font-family:Space Mono,monospace;">{true_ct}</div>'
+        f'<div style="font-size:9px;color:#475569;text-transform:uppercase;">Completed this sprint</div>'
+        f'</div>'
+        f'<div style="text-align:center;">'
+        f'<div style="font-size:20px;font-weight:900;color:#fbbf24;font-family:Space Mono,monospace;">{pre_ct}</div>'
+        f'<div style="font-size:9px;color:#475569;text-transform:uppercase;">Pre-sprint done</div>'
+        f'</div>'
+        f'<div style="text-align:center;">'
+        f'<div style="font-size:20px;font-weight:900;color:#818cf8;font-family:Space Mono,monospace;">{m.get("true_done_sp", 0)}</div>'
+        f'<div style="font-size:9px;color:#475569;text-transform:uppercase;">SP this sprint</div>'
+        f'</div>'
+        f'</div></div>',
+        unsafe_allow_html=True
+    )
 
     # Carried over indicator
     if carried_ct > 0:

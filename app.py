@@ -820,49 +820,76 @@ def render_burndown(m):
     total   = m["total"]; cd = m["current_day"]
     s_start = m.get("sprint_start", SPRINT_START)
     s_days  = m.get("sprint_days",  SPRINT_DAYS)
+
+    # ── True burndown: exclude tickets already done before sprint started ──
+    # pre_done = resolved before sprint start = carried in already done
+    # true_total = work that actually needed doing in this sprint
+    pre_done_ct  = len(m.get("pre_done", []))
+    true_done_ct = len(m.get("true_done", []))
+    true_total   = total - pre_done_ct  # tickets that needed sprint work
+
     # Build key day markers dynamically based on sprint length
     step = max(1, s_days // 8)
     key_days = sorted(set([1] + list(range(step, s_days, step)) + [s_days, cd]))
     rows = []
     for d in key_days:
         dt = s_start + pd.Timedelta(days=d-1)
-        ideal = max(0, round(total-(total/s_days)*(d-1))) if s_days else 0
-        actual = total if d==1 else (total-len(m["done"]) if d==cd else None)
+        ideal  = max(0, round(true_total - (true_total / s_days) * (d-1))) if s_days else 0
+        actual = true_total if d==1 else (true_total - true_done_ct if d==cd else None)
         rows.append({"label": f"Today {dt.strftime('%d %b')}" if d==cd else dt.strftime('%d %b'), "ideal": ideal, "actual": actual})
     df = pd.DataFrame(rows)
 
-    gap = m["gap"]
-    gap_color = "#10b981" if gap<=0 else "#fbbf24" if gap<=5 else "#f87171"
+    # Gap based on true work only
+    true_actual = true_total - true_done_ct
+    true_ideal  = max(0, round(true_total - (true_total / s_days) * (cd-1))) if s_days else 0
+    gap         = true_actual - true_ideal
+    gap_color   = "#10b981" if gap<=0 else "#fbbf24" if gap<=5 else "#f87171"
+
     st.markdown(f"**🔥 Sprint Burndown** — Day {cd}/{s_days} · {s_days-cd} days left")
 
-    c = st.columns(5)
+    # Info banner explaining true burndown
+    st.markdown(
+        f'<div style="background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.2);'
+        f'border-radius:6px;padding:6px 12px;margin-bottom:8px;font-size:10px;color:#818cf8;">'
+        f'📊 True burndown: <b>{true_total}</b> tickets needed sprint work '
+        f'(<b>{pre_done_ct}</b> pre-sprint done excluded from {total} total) '
+        f'· Start date: <b>{s_start}</b> from Jira'
+        f'</div>',
+        unsafe_allow_html=True
+    )
+
+    c = st.columns(6)
     for col, (lbl, val, clr) in zip(c, [
-        ("Sprint Day", f"{cd}/{s_days}", "#00d4ff"),
-        ("Days Left", s_days-cd, "#818cf8"),
-        ("Ideal", m["ideal"], "#f87171"),
-        ("Actual", m["actual"], "#00d4ff"),
-        ("Gap", "On Track 🎯" if gap<=0 else f"+{gap} Behind", gap_color),
+        ("Sprint Day",    f"{cd}/{s_days}",  "#00d4ff"),
+        ("Days Left",     s_days-cd,         "#818cf8"),
+        ("Sprint Work",   true_total,        "#a78bfa"),
+        ("Ideal Left",    true_ideal,        "#f87171"),
+        ("Actual Left",   true_actual,       "#00d4ff"),
+        ("Gap",           "On Track 🎯" if gap<=0 else f"+{gap} Behind", gap_color),
     ]):
         col.markdown(f"<div style='background:rgba(15,22,41,0.8);border:1px solid {clr}25;border-radius:10px;padding:10px;text-align:center;'><div style='font-size:16px;font-weight:900;color:{clr};font-family:Space Mono,monospace;'>{val}</div><div style='font-size:9px;color:#475569;text-transform:uppercase;margin-top:3px;'>{lbl}</div></div>", unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=df["label"], y=df["ideal"], name="Ideal", mode="lines+markers",
+    fig.add_trace(go.Scatter(x=df["label"], y=df["ideal"], name="Ideal Burndown", mode="lines+markers",
         line=dict(color="#f87171",width=2,dash="dash"), marker=dict(color="#f87171",size=6),
-        fill="tozeroy", fillcolor="rgba(248,113,113,0.05)", hovertemplate="<b>%{x}</b><br>Ideal: %{y}<extra></extra>"))
-    fig.add_trace(go.Scatter(x=df["label"], y=df["actual"], name="Actual", mode="lines+markers",
+        fill="tozeroy", fillcolor="rgba(248,113,113,0.05)", hovertemplate="<b>%{x}</b><br>Ideal remaining: %{y}<extra></extra>"))
+    fig.add_trace(go.Scatter(x=df["label"], y=df["actual"], name="Actual Remaining", mode="lines+markers",
         line=dict(color="#00d4ff",width=3), marker=dict(color="#00d4ff",size=8),
         fill="tozeroy", fillcolor="rgba(0,212,255,0.06)", connectgaps=True,
-        hovertemplate="<b>%{x}</b><br>Actual: %{y}<extra></extra>"))
+        hovertemplate="<b>%{x}</b><br>Actual remaining: %{y}<extra></extra>"))
     fig.update_layout(height=320, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
         font=dict(family="DM Sans",color="#64748b"),
         legend=dict(bgcolor="rgba(0,0,0,0)",font=dict(color="#94a3b8")),
         xaxis=dict(gridcolor="#1e2d47",tickfont=dict(size=10),tickangle=-20),
-        yaxis=dict(gridcolor="#1e2d47",tickfont=dict(size=10),range=[0,total+3]),
-        margin=dict(l=0,r=0,t=10,b=40), hovermode="x unified")
+        yaxis=dict(gridcolor="#1e2d47",tickfont=dict(size=10),range=[0,true_total+3]),
+        margin=dict(l=0,r=0,t=10,b=40), hovermode="x unified",
+        title=dict(text=f"Burning down {true_total} sprint tickets ({pre_done_ct} pre-done excluded)",
+                   font=dict(size=11,color="#475569"), x=0))
     st.plotly_chart(fig, use_container_width=True)
     elapsed = round(((cd-1)/max(1,(s_days-1)))*100)
-    st.progress(elapsed/100, text=f"Sprint {elapsed}% elapsed · {s_days-cd} days remaining")
+    pct_burned = round(true_done_ct/true_total*100) if true_total else 0
+    st.progress(elapsed/100, text=f"Sprint {elapsed}% elapsed · {true_done_ct}/{true_total} sprint tickets done ({pct_burned}%) · {s_days-cd} days remaining")
 
 
 # ─── VELOCITY TAB ─────────────────────────────────────────
